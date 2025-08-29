@@ -368,11 +368,11 @@ func compareSlicesAdvanced(path string, leftVal, rightVal reflect.Value, result 
 		return nil
 	}
 
-	return compareSlicesByValue(path, leftVal, rightVal, result, config)
+	return compareSlicesByValue(path, leftVal, rightVal, result)
 }
 
 // compareSlicesByValue compares slices using value-based matching (similar to the original ignoreOrder)
-func compareSlicesByValue(path string, leftVal, rightVal reflect.Value, result *DiffResult, config *CompareConfig) error {
+func compareSlicesByValue(path string, leftVal, rightVal reflect.Value, result *DiffResult) error {
 	elemType := leftVal.Type().Elem()
 	if !elemType.Comparable() {
 		return compareSlicesWithDeepEqual(path, leftVal, rightVal, result)
