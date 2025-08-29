@@ -26,7 +26,6 @@ func (dr *DiffResult) String() string {
 	sb.WriteString(fmt.Sprintf("Found %d differences:\n", len(dr.Diffs)))
 
 	for _, diff := range dr.Diffs {
-		// Use type assertion to handle different diff types
 		switch d := diff.(type) {
 		case *MapDiff:
 			sb.WriteString(string(d.ChangeType))
@@ -183,7 +182,6 @@ func (dr *DiffResult) ToJSON() string {
 			}
 		}
 		changes = append(changes, jc)
-		// no-op for summary counts anymore
 	}
 
 	jsonBytes, err := json.MarshalIndent(changes, "", "  ")

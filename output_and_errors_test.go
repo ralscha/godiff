@@ -74,7 +74,7 @@ func TestJSONOutput2(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Generated JSON is invalid: %v", err)
 	}
-	// Expect no differences - empty array
+
 	if len(parsedNoDiff) != 0 {
 		t.Error("JSON output should be empty array for no differences")
 	}
@@ -515,7 +515,6 @@ func TestJSONOutput(t *testing.T) {
 				t.Error("expected non-empty JSON output")
 			}
 
-			// Validate that the output is a valid JSON array
 			var parsed []any
 			err = json.Unmarshal([]byte(jsonOutput), &parsed)
 			if err != nil {
