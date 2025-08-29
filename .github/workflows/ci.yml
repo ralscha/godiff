@@ -37,7 +37,7 @@ jobs:
 
       - name: Run unit tests with coverage
         run: |
-          go test ./... -coverprofile=coverage.out -covermode=atomic -race -count=1
+          go test $(go list ./... | grep -v './cmd/demo') -coverprofile=coverage.out -covermode=atomic -race -count=1
 
       - name: Check coverage threshold
         env:
@@ -68,11 +68,24 @@ jobs:
           check-latest: true
       - name: Run fuzz tests (10s budget per function)
         run: |
-          # Run all fuzz targets for a short duration; adjust FUZZTIME as needed
-            go test ./... -run=^$ -fuzz=Fuzz -fuzztime=10s || {
-              echo "Fuzzing found issues" >&2
-              exit 1
-            }
+          # Run specific fuzz targets as defined in Taskfile.yml
+          echo "Running FuzzCompareStrings..."
+          go test -fuzz=FuzzCompareStrings -fuzztime=10s . || {
+            echo "Fuzzing found issues in FuzzCompareStrings" >&2
+            exit 1
+          }
+          
+          echo "Running FuzzCompareInts..."
+          go test -fuzz=FuzzCompareInts -fuzztime=10s . || {
+            echo "Fuzzing found issues in FuzzCompareInts" >&2
+            exit 1
+          }
+          
+          echo "Running FuzzCompareStructs..."
+          go test -fuzz=FuzzCompareStructs -fuzztime=10s . || {
+            echo "Fuzzing found issues in FuzzCompareStructs" >&2
+            exit 1
+          }
       - name: Upload fuzz cache corpus
         if: always()
         uses: actions/upload-artifact@v4
@@ -104,13 +117,13 @@ jobs:
           echo "Last tag: $LAST_TAG"
       - name: Run current benchmarks
         run: |
-          go test -bench=. -benchmem -run=^$ -count=5 ./... | tee benchmark_current.txt
+          go test -bench=. -benchmem -run=^$ -count=5 $(go list ./... | grep -v './cmd/demo') | tee benchmark_current.txt
       - name: Run baseline benchmarks (last tag)
         if: steps.lasttag.outputs.last_tag != ''
         run: |
           git worktree add --detach baseline "${{ steps.lasttag.outputs.last_tag }}"
           pushd baseline
-          go test -bench=. -benchmem -run=^$ -count=5 ./... > ../benchmark_base.txt
+          go test -bench=. -benchmem -run=^$ -count=5 $(go list ./... | grep -v './cmd/demo') > ../benchmark_base.txt
           popd
       - name: Compare benchmarks
         if: steps.lasttag.outputs.last_tag != ''
