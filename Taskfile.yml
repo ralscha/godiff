@@ -1,0 +1,71 @@
+version: 3
+
+vars:
+  PACKAGE: ./...
+  COVERAGE_FILE: coverage.out
+  FUZZ_TIME: 10s
+  CURRENT_DIR:
+    sh: pwd  
+
+tasks:
+  default:
+    desc: Show available tasks
+    cmds:
+      - task --list
+
+  build:
+    desc: Build the project
+    cmds:
+      - go build {{.PACKAGE}}
+
+  fmt:
+    desc: Format Go code
+    cmds:
+      - go fmt {{.PACKAGE}}
+
+  lint:
+    cmds:
+      - docker run --rm -v {{toSlash .CURRENT_DIR}}:/app -w /app golangci/golangci-lint:v2.4.0 golangci-lint run -v --timeout 5m
+
+  test:
+    desc: Run all tests
+    cmds:
+      - go test {{.PACKAGE}} -v
+
+  test:coverage:
+    desc: Run tests with coverage
+    cmds:
+      - go test {{.PACKAGE}} -coverprofile={{.COVERAGE_FILE}}
+
+  fuzz:
+    desc: Run all fuzz tests
+    cmds:
+      - task fuzz:strings
+      - task fuzz:ints
+      - task fuzz:structs
+
+  fuzz:strings:
+    desc: Run string comparison fuzz tests
+    cmds:
+      - go test -fuzz=FuzzCompareStrings -fuzztime={{.FUZZ_TIME}} .
+
+  fuzz:ints:
+    desc: Run integer comparison fuzz tests
+    cmds:
+      - go test -fuzz=FuzzCompareInts -fuzztime={{.FUZZ_TIME}} .
+
+  fuzz:structs:
+    desc: Run struct comparison fuzz tests
+    cmds:
+      - go test -fuzz=FuzzCompareStructs -fuzztime={{.FUZZ_TIME}} .
+
+  benchmark:
+    desc: Run benchmarks with memory allocation stats
+    cmds:
+      - go test {{.PACKAGE}} -bench . -benchmem -run ^$
+
+  demo:
+    desc: Run the demo CLI application
+    cmds:
+      - go run ./cmd/godiff
+

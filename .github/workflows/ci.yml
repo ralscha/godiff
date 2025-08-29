@@ -1,0 +1,150 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  test:
+    name: Tests & Coverage
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.x'
+          check-latest: true
+
+      - name: Cache Go build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: ${{ runner.os }}-go-
+
+      - name: Run unit tests with coverage
+        run: |
+          go test ./... -coverprofile=coverage.out -covermode=atomic -race -count=1
+
+      - name: Check coverage threshold
+        env:
+          COVERAGE_THRESHOLD: 80.0
+        run: |
+          total=$(go tool cover -func=coverage.out | grep total: | awk '{print substr($3, 1, length($3)-1)}')
+          echo "Total coverage: $total% (threshold $COVERAGE_THRESHOLD%)"
+          awk -v c=$total -v t=$COVERAGE_THRESHOLD 'BEGIN { if (c+0 < t+0) { exit 1 } }' || { echo "Coverage below threshold"; exit 1; }
+          go tool cover -html=coverage.out -o coverage.html
+
+      - name: Upload coverage artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: |
+            coverage.out
+            coverage.html
+
+  fuzz:
+    name: Fuzz (short)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.x'
+          check-latest: true
+      - name: Run fuzz tests (10s budget per function)
+        run: |
+          # Run all fuzz targets for a short duration; adjust FUZZTIME as needed
+            go test ./... -run=^$ -fuzz=Fuzz -fuzztime=10s || {
+              echo "Fuzzing found issues" >&2
+              exit 1
+            }
+      - name: Upload fuzz cache corpus
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-corpus
+          path: | 
+            $(go env GOCACHE)/fuzz
+          if-no-files-found: ignore
+
+  benchmark:
+    name: Benchmarks & Regression Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.x'
+          check-latest: true
+      - name: Determine last tag
+        id: lasttag
+        run: |
+          git fetch --tags --force --prune
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          echo "last_tag=$LAST_TAG" >> $GITHUB_OUTPUT
+          echo "Last tag: $LAST_TAG"
+      - name: Run current benchmarks
+        run: |
+          go test -bench=. -benchmem -run=^$ -count=5 ./... | tee benchmark_current.txt
+      - name: Run baseline benchmarks (last tag)
+        if: steps.lasttag.outputs.last_tag != ''
+        run: |
+          git worktree add --detach baseline "${{ steps.lasttag.outputs.last_tag }}"
+          pushd baseline
+          go test -bench=. -benchmem -run=^$ -count=5 ./... > ../benchmark_base.txt
+          popd
+      - name: Compare benchmarks
+        if: steps.lasttag.outputs.last_tag != ''
+        env:
+          TIME_THRESHOLD: 0.10
+          BYTES_THRESHOLD: 0.10
+          ALLOCS_THRESHOLD: 0.10
+        run: |
+          go run .github/scripts/benchcmp.go -base benchmark_base.txt -current benchmark_current.txt -time $TIME_THRESHOLD -bytes $BYTES_THRESHOLD -allocs $ALLOCS_THRESHOLD
+      - name: Upload benchmark artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmarks
+          path: |
+            benchmark_current.txt
+            benchmark_base.txt
+          if-no-files-found: ignore
+
+  # Optional job to publish benchmark baseline on tags (stores the file as a release asset)
+  publish-benchmark:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [benchmark]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download benchmark artifact
+        uses: actions/download-artifact@v5
+        with:
+            name: benchmarks
+            path: .
+      - name: Upload benchmark to release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: benchmark_current.txt
+          body: "Automated benchmark results for ${{ github.ref_name }}"
