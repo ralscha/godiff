@@ -393,7 +393,6 @@ The `ToJSON()` method returns structured data suitable for APIs:
   }
 ]
 ```
-```
 
 ## Demo
 
