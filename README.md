@@ -11,11 +11,6 @@ To use GoDiff in your project, install it using `go get`:
 go get github.com/ralscha/godiff
 ```
 
-Import in your Go code:
-```go
-import "godiff"
-```
-
 ## Quick Start
 
 ### Basic Comparison
@@ -39,6 +34,11 @@ func main() {
     
     // The String() method provides a human-readable summary
     fmt.Println(result.String())
+	// Output:
+	/*
+	Found 1 differences:
+	UPDATED [name]: Alice -> Bob
+	 */
 }
 ```
 
@@ -304,8 +304,6 @@ left := Config{Tags: []string{"admin", "user", "moderator"}}
 right := Config{Tags: []string{"user", "admin", "moderator"}}
 // No differences - same elements, different order
 ```
-
-
 
 ## Interpreting Results
 

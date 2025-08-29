@@ -31,7 +31,7 @@ func (dr *DiffResult) String() string {
 			sb.WriteString(string(d.ChangeType))
 			sb.WriteString(" ")
 			sb.WriteString(d.Path)
-			sb.WriteString(fmt.Sprintf("[%s]: ", d.Key))
+			sb.WriteString(": ")
 			switch d.ChangeType {
 			case ChangeTypeAdded:
 				sb.WriteString(fmt.Sprintf("%v", d.Right))
