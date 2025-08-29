@@ -1,5 +1,7 @@
 # GoDiff - Structural Diff Library for Go
 
+[![CI](https://github.com/ralscha/godiff/actions/workflows/ci.yml/badge.svg)](https://github.com/ralscha/godiff/actions/workflows/ci.yml)
+
 GoDiff is a Go library for computing structural differences between any two values. It provides detailed, recursive comparison of primitives, structs, pointers, slices, and maps, returning a structured result that describes all changes.
 
 ## Installation
