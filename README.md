@@ -285,8 +285,6 @@ GoDiff includes specialized handlers for complex Go types:
 
 ### Advanced Slice Comparison
 
-GoDiff provides sophisticated slice comparison with multiple algorithms:
-
 #### Order-Sensitive Comparison (Default)
 ```go
 left := []string{"a", "b", "c"}
@@ -357,39 +355,6 @@ if result.HasDifferences() {
 } else {
     fmt.Println("Objects are identical")
 }
-```
-
-#### JSON Output Format
-
-The `ToJSON()` method returns structured data suitable for APIs:
-
-```json
-[
-  {
-    "type": "struct",
-    "path": "User",
-    "leftValue": "Alice",
-    "rightValue": "Bob", 
-    "fieldName": "Name",
-    "change": "UPDATED"
-  },
-  {
-    "type": "slice",
-    "path": "Tags",
-    "leftValue": "admin",
-    "rightValue": "user",
-    "index": 0,
-    "change": "UPDATED"
-  },
-  {
-    "type": "map", 
-    "path": "Metadata",
-    "leftValue": null,
-    "rightValue": "active",
-    "key": "status", 
-    "change": "ADDED"
-  }
-]
 ```
 
 ## Demo
