@@ -121,24 +121,16 @@ func main() {
 	fmt.Println(result8.String())
 	fmt.Println()
 
-	// Example 9: Reference changed (pointers)
-	fmt.Println("9. Comparing different pointers (REFERENCE_CHANGED):")
-	addr1 := &Address{Street: "123 Main St", City: "New York"}
-	addr2 := &Address{Street: "123 Main St", City: "New York"}
-	result9, _ := godiff.Compare(addr1, addr2)
-	fmt.Println(result9.String())
-	fmt.Println()
-
-	// Example 10: Time comparison with TimeHandler
-	fmt.Println("10. Comparing time values:")
+	// Example 9: Time comparison with TimeHandler
+	fmt.Println("9. Comparing time values:")
 	time1 := time.Date(2023, 1, 1, 12, 0, 0, 0, time.UTC)
 	time2 := time.Date(2023, 1, 1, 12, 0, 1, 0, time.UTC) // 1-second difference
 	result10, _ := godiff.Compare(time1, time2)
 	fmt.Println(result10.String())
 	fmt.Println()
 
-	// Example 11: Interface comparison with InterfaceHandler
-	fmt.Println("11. Comparing interface values:")
+	// Example 10: Interface comparison with InterfaceHandler
+	fmt.Println("10. Comparing interface values:")
 	var iface1, iface2 any
 	iface1 = "hello"
 	iface2 = "world"
@@ -146,24 +138,24 @@ func main() {
 	fmt.Println(result11.String())
 	fmt.Println()
 
-	// Example 12: Function comparison with FunctionHandler
-	fmt.Println("12. Comparing function references:")
+	// Example 11: Function comparison with FunctionHandler
+	fmt.Println("11. Comparing function references:")
 	func1 := func() { fmt.Println("Function 1") }
 	func2 := func() { fmt.Println("Function 2") }
 	result12, _ := godiff.Compare(func1, func2)
 	fmt.Println(result12.String())
 	fmt.Println()
 
-	// Example 13: Nil vs value comparisons
-	fmt.Println("13. Comparing nil vs values:")
+	// Example 12: Nil vs value comparisons
+	fmt.Println("12. Comparing nil vs values:")
 	result13a, _ := godiff.Compare(nil, "value")
 	result13b, _ := godiff.Compare("value", nil)
 	fmt.Println("nil -> value:", result13a.String())
 	fmt.Println("value -> nil:", result13b.String())
 	fmt.Println()
 
-	// Example 14: Complex nested structure
-	fmt.Println("14. Comparing complex nested structures:")
+	// Example 13: Complex nested structure
+	fmt.Println("13. Comparing complex nested structures:")
 	type ComplexStruct struct {
 		NestedMap    map[string][]map[string]int
 		NestedSlice  []map[string][]string
@@ -202,8 +194,8 @@ func main() {
 	fmt.Println(result14.String())
 	fmt.Println()
 
-	// Example 15: Custom comparator example
-	fmt.Println("15. Using custom comparator:")
+	// Example 14: Custom comparator example
+	fmt.Println("14. Using custom comparator:")
 	type CustomType struct {
 		Value string
 	}
@@ -232,8 +224,8 @@ func main() {
 	fmt.Println(result15.String())
 	fmt.Println()
 
-	// Example 16: Channel comparison with ChannelHandler
-	fmt.Println("16. Comparing channels:")
+	// Example 15: Channel comparison with ChannelHandler
+	fmt.Println("15. Comparing channels:")
 	ch1 := make(chan int, 5)
 	ch2 := make(chan int, 5)
 	result16a, _ := godiff.Compare(ch1, ch2)
@@ -242,8 +234,8 @@ func main() {
 	fmt.Println("Same channel:", result16b.String())
 	fmt.Println()
 
-	// Example 17: Output methods demonstration
-	fmt.Println("17. Output methods demonstration:")
+	// Example 16: Output methods demonstration
+	fmt.Println("16. Output methods demonstration:")
 	result17, _ := godiff.Compare("hello", "world")
 
 	fmt.Println("String output:")

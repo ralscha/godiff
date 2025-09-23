@@ -67,5 +67,5 @@ tasks:
   demo:
     desc: Run the demo CLI application
     cmds:
-      - go run ./cmd/godiff
+      - go run ./cmd/demo
 
