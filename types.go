@@ -47,6 +47,38 @@ type DiffResult struct {
 	Diffs []any // Can hold Diff, MapDiff, SliceDiff, or StructDiff
 }
 
+// AddDiff adds a basic Diff to the result
+func (dr *DiffResult) AddDiff(path string, left, right any) {
+	dr.Diffs = append(dr.Diffs, &Diff{Path: path, Left: left, Right: right})
+}
+
+// AddStructDiff adds a StructDiff to the result
+func (dr *DiffResult) AddStructDiff(path, fieldName string, left, right any, changeType ChangeType) {
+	dr.Diffs = append(dr.Diffs, &StructDiff{
+		Diff:       Diff{Path: path, Left: left, Right: right},
+		FieldName:  fieldName,
+		ChangeType: changeType,
+	})
+}
+
+// AddSliceDiff adds a SliceDiff to the result
+func (dr *DiffResult) AddSliceDiff(path string, index int, left, right any, changeType ChangeType) {
+	dr.Diffs = append(dr.Diffs, &SliceDiff{
+		Diff:       Diff{Path: path, Left: left, Right: right},
+		Index:      index,
+		ChangeType: changeType,
+	})
+}
+
+// AddMapDiff adds a MapDiff to the result
+func (dr *DiffResult) AddMapDiff(path string, key, left, right any, changeType ChangeType) {
+	dr.Diffs = append(dr.Diffs, &MapDiff{
+		Diff:       Diff{Path: path, Left: left, Right: right},
+		Key:        key,
+		ChangeType: changeType,
+	})
+}
+
 // CompareConfig holds configuration options for the comparison
 type CompareConfig struct {
 	// IgnoreFields is a list of field paths to ignore during comparison (e.g., "User.Password").

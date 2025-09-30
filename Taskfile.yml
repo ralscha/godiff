@@ -24,6 +24,7 @@ tasks:
       - go fmt {{.PACKAGE}}
 
   lint:
+    desc: Run golangci-lint in a Docker container
     cmds:
       - docker run --rm -v {{toSlash .CURRENT_DIR}}:/app -w /app golangci/golangci-lint:v2.5.0 golangci-lint run -v --timeout 5m
 

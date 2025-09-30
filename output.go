@@ -13,12 +13,25 @@ func (dr *DiffResult) String() string {
 	}
 
 	var sb strings.Builder
-	estimatedSize := len(dr.Diffs) * 80
+	const avgBytesPerDiff = 80
+	const changeTypeOverhead = 10
+	estimatedSize := 30 + (len(dr.Diffs) * (avgBytesPerDiff + changeTypeOverhead))
+
 	for _, diff := range dr.Diffs {
-		if d, ok := diff.(*Diff); ok {
+		switch d := diff.(type) {
+		case *Diff:
 			if len(d.Path) > 20 {
 				estimatedSize += len(d.Path) * 2
 			}
+		case *StructDiff:
+			if len(d.Path) > 20 {
+				estimatedSize += len(d.Path) * 2
+			}
+			if len(d.FieldName) > 10 {
+				estimatedSize += len(d.FieldName)
+			}
+		case *SliceDiff, *MapDiff:
+			estimatedSize += 20
 		}
 	}
 	sb.Grow(estimatedSize)

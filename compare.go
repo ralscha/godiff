@@ -28,6 +28,26 @@ func CompareWithConfig(left, right any, config *CompareConfig) (*DiffResult, err
 	return result, nil
 }
 
+// handleInvalidValues checks if either value is invalid and records a diff if needed
+// Returns true if handled (one or both values invalid), false if both are valid
+func handleInvalidValues(path string, left, right any, leftVal, rightVal reflect.Value, result *DiffResult) bool {
+	if !leftVal.IsValid() && !rightVal.IsValid() {
+		return true // both invalid, no diff
+	}
+
+	if !leftVal.IsValid() {
+		result.AddDiff(path, nil, right)
+		return true
+	}
+
+	if !rightVal.IsValid() {
+		result.AddDiff(path, left, nil)
+		return true
+	}
+
+	return false // both valid, not handled
+}
+
 // compareValues recursively compares two values and records differences
 func compareValues(path string, left, right any, result *DiffResult, config *CompareConfig) error {
 	if slices.Contains(config.IgnoreFields, path) {
@@ -51,25 +71,7 @@ func compareValues(path string, left, right any, result *DiffResult, config *Com
 	leftVal := reflect.ValueOf(left)
 	rightVal := reflect.ValueOf(right)
 
-	if !leftVal.IsValid() && !rightVal.IsValid() {
-		return nil
-	}
-
-	if !leftVal.IsValid() {
-		result.Diffs = append(result.Diffs, &Diff{
-			Path:  path,
-			Left:  nil,
-			Right: right,
-		})
-		return nil
-	}
-
-	if !rightVal.IsValid() {
-		result.Diffs = append(result.Diffs, &Diff{
-			Path:  path,
-			Left:  left,
-			Right: nil,
-		})
+	if handleInvalidValues(path, left, right, leftVal, rightVal, result) {
 		return nil
 	}
 
@@ -399,11 +401,9 @@ func compareSlicesByValue(path string, leftVal, rightVal reflect.Value, result *
 		rightCounts[elem]++
 	}
 
-	estimatedDiffs := abs(leftLen-rightLen) + len(leftCounts) + len(rightCounts)
-	if estimatedDiffs > cap(result.Diffs)-len(result.Diffs) {
-		newDiffs := make([]any, len(result.Diffs), len(result.Diffs)+estimatedDiffs)
-		copy(newDiffs, result.Diffs)
-		result.Diffs = newDiffs
+	maxDiffs := leftLen + rightLen
+	if cap(result.Diffs) < len(result.Diffs)+maxDiffs {
+		result.Diffs = slices.Grow(result.Diffs, maxDiffs)
 	}
 
 	// removed
@@ -437,59 +437,15 @@ func compareSlicesByValue(path string, leftVal, rightVal reflect.Value, result *
 	return nil
 }
 
-// compareSlicesSimple provides optimized comparison for small slices
-func compareSlicesSimple(path string, leftVal, rightVal reflect.Value, result *DiffResult) error {
-	leftLen := leftVal.Len()
-	rightLen := rightVal.Len()
-
-	visited := make([]bool, rightLen)
-
-	for i := 0; i < leftLen; i++ {
-		leftElem := leftVal.Index(i).Interface()
-		found := false
-
-		for j := 0; j < rightLen; j++ {
-			if !visited[j] {
-				rightElem := rightVal.Index(j).Interface()
-				if reflect.DeepEqual(leftElem, rightElem) {
-					visited[j] = true
-					found = true
-					break
-				}
-			}
-		}
-
-		if !found {
-			result.Diffs = append(result.Diffs, &Diff{
-				Path:  path,
-				Left:  leftElem,
-				Right: nil,
-			})
-		}
-	}
-
-	for j := 0; j < rightLen; j++ {
-		if !visited[j] {
-			rightElem := rightVal.Index(j).Interface()
-			result.Diffs = append(result.Diffs, &Diff{
-				Path:  path,
-				Left:  nil,
-				Right: rightElem,
-			})
-		}
-	}
-
-	return nil
-}
-
-// compareSlicesWithDeepEqual compares slices using DeepEqual for non-comparable types, ignoring order
-func compareSlicesWithDeepEqual(path string, leftVal, rightVal reflect.Value, result *DiffResult) error {
+// compareSlicesUnordered provides unified comparison for slices ignoring order
+// Uses DeepEqual for matching elements
+func compareSlicesUnordered(path string, leftVal, rightVal reflect.Value, result *DiffResult) error {
 	leftLen := leftVal.Len()
 	rightLen := rightVal.Len()
 
 	rightMatched := make([]bool, rightLen)
 
-	for i := 0; i < leftLen; i++ {
+	for i := range leftLen {
 		leftElem := leftVal.Index(i).Interface()
 		found := false
 
@@ -513,6 +469,7 @@ func compareSlicesWithDeepEqual(path string, leftVal, rightVal reflect.Value, re
 		}
 	}
 
+	// Find unmatched right elements
 	for j := 0; j < rightLen; j++ {
 		if !rightMatched[j] {
 			rightElem := rightVal.Index(j).Interface()
@@ -527,53 +484,14 @@ func compareSlicesWithDeepEqual(path string, leftVal, rightVal reflect.Value, re
 	return nil
 }
 
-// compareSlicesElementByElement performs simple element-by-element comparison without order consideration
-func compareSlicesElementByElement(path string, leftVal, rightVal reflect.Value, result *DiffResult) error {
-	leftLen := leftVal.Len()
-	rightLen := rightVal.Len()
-	maxLen := max(rightLen, leftLen)
+// compareSlicesSimple provides optimized comparison for small slices
+func compareSlicesSimple(path string, leftVal, rightVal reflect.Value, result *DiffResult) error {
+	return compareSlicesUnordered(path, leftVal, rightVal, result)
+}
 
-	for i := 0; i < maxLen; i++ {
-		elementPath := fmt.Sprintf("%s[%d]", path, i)
-
-		var leftElem, rightElem any
-		var hasLeftElem, hasRightElem bool
-
-		if i < leftLen {
-			leftElem = leftVal.Index(i).Interface()
-			hasLeftElem = true
-		}
-		if i < rightLen {
-			rightElem = rightVal.Index(i).Interface()
-			hasRightElem = true
-		}
-
-		if hasLeftElem && hasRightElem {
-			if !reflect.DeepEqual(leftElem, rightElem) {
-				result.Diffs = append(result.Diffs, &Diff{
-					Path:  elementPath,
-					Left:  leftElem,
-					Right: rightElem,
-				})
-			}
-		} else if hasLeftElem {
-			// removed
-			result.Diffs = append(result.Diffs, &Diff{
-				Path:  elementPath,
-				Left:  leftElem,
-				Right: nil,
-			})
-		} else {
-			// added
-			result.Diffs = append(result.Diffs, &Diff{
-				Path:  elementPath,
-				Left:  nil,
-				Right: rightElem,
-			})
-		}
-	}
-
-	return nil
+// compareSlicesWithDeepEqual compares slices using DeepEqual for non-comparable types, ignoring order
+func compareSlicesWithDeepEqual(path string, leftVal, rightVal reflect.Value, result *DiffResult) error {
+	return compareSlicesUnordered(path, leftVal, rightVal, result)
 }
 
 func abs(x int) int {
