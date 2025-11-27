@@ -14,11 +14,6 @@ type TestStruct struct {
 	Numbers []int
 }
 
-type IDStruct struct {
-	ID   int `diff:"id"`
-	Name string
-}
-
 func TestIgnoreOrderTag(t *testing.T) {
 	leftStruct := TestStruct{
 		ID:      1,
@@ -146,7 +141,7 @@ func TestIgnoreOrderDifferentContent(t *testing.T) {
 	}
 }
 
-func TestCompareWithConfig(t *testing.T) {
+func TestCompareWithOptions(t *testing.T) {
 	type ConfigTest struct {
 		A string
 		B int
@@ -157,11 +152,9 @@ func TestCompareWithConfig(t *testing.T) {
 	rightStruct := ConfigTest{A: "world", B: 43, C: false}
 
 	t.Run("Ignore one field", func(t *testing.T) {
-		config := DefaultCompareConfig()
-		config.IgnoreFields = []string{"B"}
-		result, err := CompareWithConfig(leftStruct, rightStruct, config)
+		result, err := Compare(leftStruct, rightStruct, WithIgnoreFields("B"))
 		if err != nil {
-			t.Fatalf("CompareWithConfig failed: %v", err)
+			t.Fatalf("Compare failed: %v", err)
 		}
 		if len(result.Diffs) != 2 {
 			t.Errorf("Expected 2 differences, got %d: %s", len(result.Diffs), result.String())
@@ -189,11 +182,9 @@ func TestCompareWithConfig(t *testing.T) {
 	})
 
 	t.Run("Ignore multiple fields", func(t *testing.T) {
-		config := DefaultCompareConfig()
-		config.IgnoreFields = []string{"A", "C"}
-		result, err := CompareWithConfig(leftStruct, rightStruct, config)
+		result, err := Compare(leftStruct, rightStruct, WithIgnoreFields("A", "C"))
 		if err != nil {
-			t.Fatalf("CompareWithConfig failed: %v", err)
+			t.Fatalf("Compare failed: %v", err)
 		}
 		if len(result.Diffs) != 1 {
 			t.Errorf("Expected 1 difference, got %d: %s", len(result.Diffs), result.String())
@@ -258,17 +249,16 @@ func TestCustomComparator(t *testing.T) {
 		return leftVal.Value[:3] == rightVal.Value[:3], nil
 	}
 
-	config := DefaultCompareConfig()
-	config.CustomComparators = map[reflect.Type]func(left, right any, config *CompareConfig) (bool, error){
+	comparators := map[reflect.Type]func(left, right any, config *CompareConfig) (bool, error){
 		reflect.TypeOf(CustomType{}): customComparator,
 	}
 
 	t.Run("Custom comparator finds no difference when first 3 chars match", func(t *testing.T) {
 		leftVal := CustomType{Value: "hello"}
 		rightVal := CustomType{Value: "help me"}
-		result, err := CompareWithConfig(leftVal, rightVal, config)
+		result, err := Compare(leftVal, rightVal, WithCustomComparators(comparators))
 		if err != nil {
-			t.Fatalf("CompareWithConfig failed: %v", err)
+			t.Fatalf("Compare failed: %v", err)
 		}
 		if len(result.Diffs) != 0 {
 			t.Errorf("Expected no differences, got %d: %s", len(result.Diffs), result.String())
@@ -282,9 +272,9 @@ func TestCustomComparator(t *testing.T) {
 	t.Run("Custom comparator finds difference when first 3 chars differ", func(t *testing.T) {
 		leftVal := CustomType{Value: "hello"}
 		rightVal := CustomType{Value: "world"}
-		result, err := CompareWithConfig(leftVal, rightVal, config)
+		result, err := Compare(leftVal, rightVal, WithCustomComparators(comparators))
 		if err != nil {
-			t.Fatalf("CompareWithConfig failed: %v", err)
+			t.Fatalf("Compare failed: %v", err)
 		}
 		if len(result.Diffs) != 1 {
 			t.Errorf("Expected 1 difference, got %d: %s", len(result.Diffs), result.String())
@@ -307,9 +297,9 @@ func TestCustomComparator(t *testing.T) {
 	t.Run("Custom comparator handles short strings", func(t *testing.T) {
 		leftVal := CustomType{Value: "hi"}
 		rightVal := CustomType{Value: "hi"}
-		result, err := CompareWithConfig(leftVal, rightVal, config)
+		result, err := Compare(leftVal, rightVal, WithCustomComparators(comparators))
 		if err != nil {
-			t.Fatalf("CompareWithConfig failed: %v", err)
+			t.Fatalf("Compare failed: %v", err)
 		}
 		if len(result.Diffs) != 0 {
 			t.Errorf("Expected no differences for short equal strings, got %d: %s", len(result.Diffs), result.String())
@@ -442,12 +432,9 @@ func TestDefaultTypeHandlers(t *testing.T) {
 	leftTime := time.Now()
 	rightTime := leftTime.Add(time.Second)
 
-	config := DefaultCompareConfig()
-	config.TypeHandlers = DefaultTypeHandlers()
-
-	result, err := CompareWithConfig(leftTime, rightTime, config)
+	result, err := Compare(leftTime, rightTime, WithTypeHandlers(DefaultTypeHandlers()))
 	if err != nil {
-		t.Fatalf("CompareWithConfig failed: %v", err)
+		t.Fatalf("Compare failed: %v", err)
 	}
 	if len(result.Diffs) != 1 {
 		t.Errorf("Expected 1 difference for different times, got %d: %s", len(result.Diffs), result.String())
@@ -460,29 +447,6 @@ func TestDefaultTypeHandlers(t *testing.T) {
 		if diff, ok := result.Diffs[0].(*Diff); ok {
 			if diff.Left != leftTime || diff.Right != rightTime {
 				t.Errorf("Expected diff values %+v -> %+v, got %+v -> %+v", leftTime, rightTime, diff.Left, diff.Right)
-			}
-		} else {
-			t.Errorf("Expected Diff type, got %T", result.Diffs[0])
-		}
-	}
-}
-
-func TestCompareWithConfigNilConfig(t *testing.T) {
-	result, err := CompareWithConfig("hello", "world", nil)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(result.Diffs) != 1 {
-		t.Errorf("expected 1 difference, got %d", len(result.Diffs))
-	}
-
-	if len(result.Diffs) > 0 {
-		if diff, ok := result.Diffs[0].(*Diff); ok {
-			if diff.Left != "hello" {
-				t.Errorf("Expected left value 'hello', got %v", diff.Left)
-			}
-			if diff.Right != "world" {
-				t.Errorf("Expected right value 'world', got %v", diff.Right)
 			}
 		} else {
 			t.Errorf("Expected Diff type, got %T", result.Diffs[0])
@@ -525,94 +489,5 @@ func TestIsFieldIgnoredEdgeCases(t *testing.T) {
 				t.Errorf("Expected %v, got %v for %s", tt.expected, ignored, tt.fieldPath)
 			}
 		})
-	}
-}
-
-func TestGetObjectIDAdditionalEdgeCases(t *testing.T) {
-	type StructWithPrivateID struct {
-		id   int
-		Name string
-	}
-
-	type StructWithZeroID struct {
-		ID   int `diff:"id"`
-		Name string
-	}
-
-	tests := []struct {
-		name     string
-		obj      any
-		config   *CompareConfig
-		expected any
-		hasID    bool
-	}{
-		{
-			name:     "nil object",
-			obj:      nil,
-			config:   DefaultCompareConfig(),
-			expected: nil,
-			hasID:    false,
-		},
-		{
-			name:     "private ID field",
-			obj:      StructWithPrivateID{id: 123, Name: "test"},
-			config:   &CompareConfig{IDFieldNames: []string{"id"}},
-			expected: nil,
-			hasID:    false,
-		},
-		{
-			name:     "zero ID value",
-			obj:      StructWithZeroID{ID: 0, Name: "test"},
-			config:   DefaultCompareConfig(),
-			expected: nil,
-			hasID:    false,
-		},
-		{
-			name:     "valid ID from config",
-			obj:      StructWithZeroID{ID: 123, Name: "test"},
-			config:   &CompareConfig{IDFieldNames: []string{"ID"}},
-			expected: 123,
-			hasID:    true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			id, hasID := getObjectID(tt.obj, tt.config)
-			if hasID != tt.hasID {
-				t.Errorf("Expected hasID=%v, got %v", tt.hasID, hasID)
-			}
-			if !reflect.DeepEqual(id, tt.expected) {
-				t.Errorf("Expected id=%v, got %v", tt.expected, id)
-			}
-		})
-	}
-}
-
-func TestIDComparison(t *testing.T) {
-	type StructWithID struct {
-		ID   int `diff:"id"`
-		Name string
-	}
-
-	left := StructWithID{ID: 1, Name: "Alice"}
-	right := StructWithID{ID: 2, Name: "Alice"}
-
-	result, err := Compare(left, right)
-	if err != nil {
-		t.Fatalf("Compare failed: %v", err)
-	}
-
-	if len(result.Diffs) != 1 {
-		t.Fatalf("Expected 1 difference, got %d: %s", len(result.Diffs), result.String())
-	}
-
-	diff, ok := result.Diffs[0].(*StructDiff)
-	if !ok {
-		t.Fatalf("Expected a StructDiff, got %T", result.Diffs[0])
-	}
-
-	if diff.ChangeType != ChangeTypeIDMismatch {
-		t.Errorf("Expected change type %s, got %s", ChangeTypeIDMismatch, diff.ChangeType)
 	}
 }

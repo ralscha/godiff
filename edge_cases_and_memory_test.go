@@ -245,8 +245,6 @@ func TestMemoryEfficiency(t *testing.T) {
 }
 
 func TestVisitedPairsInitialization(t *testing.T) {
-	config := &CompareConfig{}
-
 	type Node struct {
 		Value int
 		Next  *Node
@@ -258,7 +256,7 @@ func TestVisitedPairsInitialization(t *testing.T) {
 	right := &Node{Value: 1}
 	right.Next = right
 
-	result, err := CompareWithConfig(left, right, config)
+	result, err := Compare(left, right)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -355,11 +353,9 @@ func TestMaxDepth(t *testing.T) {
 	})
 
 	t.Run("depth 1 stops at first level", func(t *testing.T) {
-		config := DefaultCompareConfig()
-		config.MaxDepth = 1
-		result, err := CompareWithConfig(left, right, config)
+		result, err := Compare(left, right, WithMaxDepth(1))
 		if err != nil {
-			t.Fatalf("CompareWithConfig failed: %v", err)
+			t.Fatalf("Compare failed: %v", err)
 		}
 		if len(result.Diffs) != 0 {
 			t.Errorf("Expected no differences at depth 1, got %d", len(result.Diffs))
@@ -367,11 +363,9 @@ func TestMaxDepth(t *testing.T) {
 	})
 
 	t.Run("depth 4 finds nested differences", func(t *testing.T) {
-		config := DefaultCompareConfig()
-		config.MaxDepth = 5
-		result, err := CompareWithConfig(left, right, config)
+		result, err := Compare(left, right, WithMaxDepth(5))
 		if err != nil {
-			t.Fatalf("CompareWithConfig failed: %v", err)
+			t.Fatalf("Compare failed: %v", err)
 		}
 		if len(result.Diffs) == 0 {
 			t.Error("Expected differences to be found at depth 5")

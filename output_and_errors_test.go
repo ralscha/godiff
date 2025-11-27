@@ -8,6 +8,11 @@ import (
 	"testing"
 )
 
+type SimpleStruct struct {
+	ID   int
+	Name string
+}
+
 type DeepStruct struct {
 	Level1 struct {
 		Level2 struct {
@@ -92,15 +97,14 @@ func TestCustomComparatorErrors(t *testing.T) {
 		return false, errors.New("custom comparator error")
 	}
 
-	config := DefaultCompareConfig()
-	config.CustomComparators = map[reflect.Type]func(left, right any, config *CompareConfig) (bool, error){
+	comparators := map[reflect.Type]func(left, right any, config *CompareConfig) (bool, error){
 		reflect.TypeOf(ErrorType{}): errorComparator,
 	}
 
 	left := ErrorType{Value: "test1"}
 	right := ErrorType{Value: "test2"}
 
-	result, err := CompareWithConfig(left, right, config)
+	result, err := Compare(left, right, WithCustomComparators(comparators))
 	if err == nil {
 		t.Error("Expected error from custom comparator, got nil")
 	}
@@ -231,15 +235,14 @@ func (h *SpecialStringHandler) Compare(left, right any, path string, result *Dif
 
 func TestTypeHandlerInterface(t *testing.T) {
 
-	config := DefaultCompareConfig()
-	config.TypeHandlers = append(config.TypeHandlers, &SpecialStringHandler{})
+	handlers := append(DefaultTypeHandlers(), &SpecialStringHandler{})
 
 	left := SpecialString("Hello")
 	right := SpecialString("hello")
 
-	result, err := CompareWithConfig(left, right, config)
+	result, err := Compare(left, right, WithTypeHandlers(handlers))
 	if err != nil {
-		t.Fatalf("CompareWithConfig failed: %v", err)
+		t.Fatalf("Compare failed: %v", err)
 	}
 
 	if len(result.Diffs) != 0 {
@@ -247,9 +250,9 @@ func TestTypeHandlerInterface(t *testing.T) {
 	}
 
 	right = "world"
-	result, err = CompareWithConfig(left, right, config)
+	result, err = Compare(left, right, WithTypeHandlers(handlers))
 	if err != nil {
-		t.Fatalf("CompareWithConfig failed: %v", err)
+		t.Fatalf("Compare failed: %v", err)
 	}
 
 	if len(result.Diffs) != 1 {
@@ -273,51 +276,17 @@ func (h *ErrorHandler) Compare(left, right any, path string, result *DiffResult,
 
 func TestTypeHandlerError(t *testing.T) {
 
-	config := DefaultCompareConfig()
-	config.TypeHandlers = append(config.TypeHandlers, &ErrorHandler{})
+	handlers := append(DefaultTypeHandlers(), &ErrorHandler{})
 
 	left := ErrorType{Value: "test1"}
 	right := ErrorType{Value: "test2"}
 
-	result, err := CompareWithConfig(left, right, config)
+	result, err := Compare(left, right, WithTypeHandlers(handlers))
 	if err == nil {
 		t.Error("Expected error from type handler, got nil")
 	}
 	if result != nil {
 		t.Error("Expected nil result when type handler returns error")
-	}
-}
-
-func TestConfigurationValidation(t *testing.T) {
-
-	left := "hello"
-	right := "world"
-
-	result, err := CompareWithConfig(left, right, nil)
-	if err != nil {
-		t.Fatalf("CompareWithConfig with nil config failed: %v", err)
-	}
-
-	if len(result.Diffs) != 1 {
-		t.Errorf("Expected 1 difference with nil config, got %d", len(result.Diffs))
-	}
-
-	config := DefaultCompareConfig()
-	config.IgnoreFields = []string{}
-
-	result, err = CompareWithConfig(left, right, config)
-	if err != nil {
-		t.Fatalf("CompareWithConfig with empty IgnoreFields failed: %v", err)
-	}
-
-	if len(result.Diffs) != 1 {
-		t.Errorf("Expected 1 difference with empty IgnoreFields, got %d", len(result.Diffs))
-	}
-
-	config.IgnoreFields = []string{"nonexistent.field", ""}
-	_, err = CompareWithConfig(left, right, config)
-	if err != nil {
-		t.Fatalf("CompareWithConfig with invalid IgnoreFields failed: %v", err)
 	}
 }
 
@@ -445,8 +414,8 @@ func TestStringOutput(t *testing.T) {
 	}{
 		{
 			name:  "complex nested structure",
-			left:  map[string][]IDStruct{"items": {{ID: 1, Name: "A"}, {ID: 2, Name: "B"}}},
-			right: map[string][]IDStruct{"items": {{ID: 1, Name: "A-modified"}, {ID: 3, Name: "C"}}},
+			left:  map[string][]SimpleStruct{"items": {{ID: 1, Name: "A"}, {ID: 2, Name: "B"}}},
+			right: map[string][]SimpleStruct{"items": {{ID: 1, Name: "A-modified"}, {ID: 3, Name: "C"}}},
 		},
 		{
 			name:  "slice differences",
@@ -488,8 +457,8 @@ func TestJSONOutput(t *testing.T) {
 	}{
 		{
 			name:  "valid JSON output with differences",
-			left:  IDStruct{ID: 1, Name: "A"},
-			right: IDStruct{ID: 1, Name: "B"},
+			left:  SimpleStruct{ID: 1, Name: "A"},
+			right: SimpleStruct{ID: 1, Name: "B"},
 		},
 		{
 			name:  "complex structure JSON",

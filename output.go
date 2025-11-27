@@ -193,8 +193,6 @@ func (ct ChangeType) String() string {
 		return "removed"
 	case ChangeTypeUpdated:
 		return "updated"
-	case ChangeTypeIDMismatch:
-		return "id mismatch"
 	default:
 		return string(ct)
 	}

@@ -504,12 +504,9 @@ func TestIgnoreFieldsSimpleName(t *testing.T) {
 	left := MyStruct{ID: 1, Value: "old", Meta: "ignored"}
 	right := MyStruct{ID: 1, Value: "new", Meta: "also ignored"}
 
-	config := DefaultCompareConfig()
-	config.IgnoreFields = []string{"Meta"}
-
-	result, err := CompareWithConfig(left, right, config)
+	result, err := Compare(left, right, WithIgnoreFields("Meta"))
 	if err != nil {
-		t.Fatalf("CompareWithConfig failed: %v", err)
+		t.Fatalf("Compare failed: %v", err)
 	}
 
 	if len(result.Diffs) != 1 {
@@ -529,12 +526,9 @@ func TestIgnoreFieldsFullPath(t *testing.T) {
 	left := MyStruct{ID: 1, Value: "old", Meta: "ignored"}
 	right := MyStruct{ID: 1, Value: "new", Meta: "also ignored"}
 
-	config := DefaultCompareConfig()
-	config.IgnoreFields = []string{"MyStruct.Meta"}
-
-	result, err := CompareWithConfig(left, right, config)
+	result, err := Compare(left, right, WithIgnoreFields("MyStruct.Meta"))
 	if err != nil {
-		t.Fatalf("CompareWithConfig failed: %v", err)
+		t.Fatalf("Compare failed: %v", err)
 	}
 
 	if len(result.Diffs) != 1 {
@@ -565,12 +559,9 @@ func TestIgnoreFieldsSelectiveByType(t *testing.T) {
 		Right: AnotherStruct{Name: "test", Meta: "should see change", Info: "info"},
 	}
 
-	config := DefaultCompareConfig()
-	config.IgnoreFields = []string{"MyStruct.Meta"}
-
-	result, err := CompareWithConfig(left, right, config)
+	result, err := Compare(left, right, WithIgnoreFields("MyStruct.Meta"))
 	if err != nil {
-		t.Fatalf("CompareWithConfig failed: %v", err)
+		t.Fatalf("Compare failed: %v", err)
 	}
 
 	if len(result.Diffs) != 2 {
@@ -609,12 +600,9 @@ func TestIgnoreFieldsMultiplePatterns(t *testing.T) {
 	left := TestStruct{ID: 1, Name: "old", Value: "old", Meta: "ignored"}
 	right := TestStruct{ID: 2, Name: "new", Value: "new", Meta: "also ignored"}
 
-	config := DefaultCompareConfig()
-	config.IgnoreFields = []string{"TestStruct.Meta", "Name"}
-
-	result, err := CompareWithConfig(left, right, config)
+	result, err := Compare(left, right, WithIgnoreFields("TestStruct.Meta", "Name"))
 	if err != nil {
-		t.Fatalf("CompareWithConfig failed: %v", err)
+		t.Fatalf("Compare failed: %v", err)
 	}
 
 	if len(result.Diffs) != 2 {
@@ -661,12 +649,9 @@ func TestIgnoreFieldsNestedStructs(t *testing.T) {
 		Inner: Inner{Meta: "also ignored", Data: "new"},
 	}
 
-	config := DefaultCompareConfig()
-	config.IgnoreFields = []string{"Inner.Meta"}
-
-	result, err := CompareWithConfig(left, right, config)
+	result, err := Compare(left, right, WithIgnoreFields("Inner.Meta"))
 	if err != nil {
-		t.Fatalf("CompareWithConfig failed: %v", err)
+		t.Fatalf("Compare failed: %v", err)
 	}
 
 	if len(result.Diffs) != 1 {
@@ -686,12 +671,9 @@ func TestUserExampleScenario(t *testing.T) {
 	left := MyStruct{ID: 1, Value: "old", Meta: "ignored"}
 	right := MyStruct{ID: 1, Value: "new", Meta: "also ignored"}
 
-	config := DefaultCompareConfig()
-	config.IgnoreFields = []string{"Meta"}
-
-	result, err := CompareWithConfig(left, right, config)
+	result, err := Compare(left, right, WithIgnoreFields("Meta"))
 	if err != nil {
-		t.Fatalf("CompareWithConfig failed: %v", err)
+		t.Fatalf("Compare failed: %v", err)
 	}
 
 	if len(result.Diffs) != 1 {

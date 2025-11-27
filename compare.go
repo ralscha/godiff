@@ -8,16 +8,60 @@ import (
 	"strings"
 )
 
-// Compare compares two values of any type and returns the differences
-func Compare(left, right any) (*DiffResult, error) {
-	return CompareWithConfig(left, right, DefaultCompareConfig())
+// CompareOption is a function that modifies a CompareConfig
+type CompareOption func(*CompareConfig)
+
+// WithIgnoreFields sets the fields to ignore during comparison
+func WithIgnoreFields(fields ...string) CompareOption {
+	return func(c *CompareConfig) {
+		c.IgnoreFields = fields
+	}
 }
 
-// CompareWithConfig compares two values with custom configuration
-func CompareWithConfig(left, right any, config *CompareConfig) (*DiffResult, error) {
-	if config == nil {
-		config = DefaultCompareConfig()
+// WithIgnoreSliceOrder enables ignoring slice element order during comparison
+func WithIgnoreSliceOrder() CompareOption {
+	return func(c *CompareConfig) {
+		c.IgnoreSliceOrder = true
 	}
+}
+
+// WithCompareNumericValues enables comparing numeric values across different types
+func WithCompareNumericValues() CompareOption {
+	return func(c *CompareConfig) {
+		c.CompareNumericValues = true
+	}
+}
+
+// WithCustomComparators sets custom comparison functions for specific types
+func WithCustomComparators(comparators map[reflect.Type]func(left, right any, config *CompareConfig) (bool, error)) CompareOption {
+	return func(c *CompareConfig) {
+		c.CustomComparators = comparators
+	}
+}
+
+// WithTypeHandlers sets the type handlers for comparing custom or complex types
+func WithTypeHandlers(handlers []TypeHandler) CompareOption {
+	return func(c *CompareConfig) {
+		c.TypeHandlers = handlers
+	}
+}
+
+// WithMaxDepth sets the maximum recursion depth for comparison (0 means unlimited)
+func WithMaxDepth(depth int) CompareOption {
+	return func(c *CompareConfig) {
+		c.MaxDepth = depth
+	}
+}
+
+// Compare compares two values of any type and returns the differences.
+// Optional configuration can be provided via CompareOption functions.
+func Compare(left, right any, opts ...CompareOption) (*DiffResult, error) {
+	config := DefaultCompareConfig()
+
+	for _, opt := range opts {
+		opt(config)
+	}
+
 	if config.visitedPairs == nil {
 		config.visitedPairs = make(map[[2]uintptr]bool)
 	}
@@ -81,7 +125,7 @@ func compareValues(path string, left, right any, result *DiffResult, config *Com
 		rv := reflect.ValueOf(right)
 		if lv.IsValid() && rv.IsValid() && lv.Type() == rv.Type() {
 			switch lv.Kind() {
-			case reflect.Ptr, reflect.Map, reflect.Slice, reflect.Chan, reflect.Func:
+			case reflect.Pointer, reflect.Map, reflect.Slice, reflect.Chan, reflect.Func:
 				if lv.Pointer() == rv.Pointer() {
 					return nil
 				}
@@ -103,6 +147,18 @@ func compareValues(path string, left, right any, result *DiffResult, config *Com
 		// Special case: nil pointers of different types are considered equal
 		if leftVal.Kind() == reflect.Ptr && rightVal.Kind() == reflect.Ptr &&
 			leftVal.IsNil() && rightVal.IsNil() {
+			return nil
+		}
+		// Check if both are numeric types and config allows cross-type numeric comparison
+		if config.CompareNumericValues && isNumericKind(leftVal.Kind()) && isNumericKind(rightVal.Kind()) {
+			if numericValuesEqual(leftVal, rightVal) {
+				return nil
+			}
+			result.Diffs = append(result.Diffs, &Diff{
+				Path:  path,
+				Left:  left,
+				Right: right,
+			})
 			return nil
 		}
 		result.Diffs = append(result.Diffs, &Diff{
@@ -213,27 +269,10 @@ func isFieldIgnored(fieldPath string, fieldName string, structType reflect.Type,
 
 // compareStructs compares two structs field by field
 func compareStructs(path string, leftVal, rightVal reflect.Value, result *DiffResult, config *CompareConfig) error {
-	leftID, leftHasID := getObjectID(leftVal.Interface(), config)
-	rightID, rightHasID := getObjectID(rightVal.Interface(), config)
-
-	if leftHasID && rightHasID {
-		if !reflect.DeepEqual(leftID, rightID) {
-			result.Diffs = append(result.Diffs, &StructDiff{
-				Diff: Diff{
-					Path:  path,
-					Left:  leftVal.Interface(),
-					Right: rightVal.Interface(),
-				},
-				FieldName:  "",
-				ChangeType: ChangeTypeIDMismatch,
-			})
-			return nil
-		}
-	}
 	typ := leftVal.Type()
 	numFields := leftVal.NumField()
 
-	for i := 0; i < numFields; i++ {
+	for i := range numFields {
 		field := typ.Field(i)
 		// Skip unexported fields to avoid calling Interface() on values we can't access from
 		// another package (this prevents panics for types like time.Time).
@@ -264,7 +303,6 @@ func compareStructs(path string, leftVal, rightVal reflect.Value, result *DiffRe
 			if hasDiffTag(diffTag, "ignoreOrder") {
 				modifiedConfig = &CompareConfig{
 					IgnoreFields:      config.IgnoreFields,
-					IDFieldNames:      config.IDFieldNames,
 					IgnoreSliceOrder:  true,
 					CustomComparators: config.CustomComparators,
 					TypeHandlers:      config.TypeHandlers,
@@ -315,7 +353,7 @@ func compareSlices(path string, leftVal, rightVal reflect.Value, result *DiffRes
 	rightLen := rightVal.Len()
 	maxLen := max(rightLen, leftLen)
 
-	for i := 0; i < maxLen; i++ {
+	for i := range maxLen {
 		var leftElem, rightElem any
 		var hasLeftElem, hasRightElem bool
 
@@ -489,7 +527,7 @@ func compareSlicesUnordered(path string, leftVal, rightVal reflect.Value, result
 		leftElem := leftVal.Index(i).Interface()
 		found := false
 
-		for j := 0; j < rightLen; j++ {
+		for j := range rightLen {
 			if !rightMatched[j] {
 				rightElem := rightVal.Index(j).Interface()
 				if reflect.DeepEqual(leftElem, rightElem) {
@@ -510,7 +548,7 @@ func compareSlicesUnordered(path string, leftVal, rightVal reflect.Value, result
 	}
 
 	// Find unmatched right elements
-	for j := 0; j < rightLen; j++ {
+	for j := range rightLen {
 		if !rightMatched[j] {
 			rightElem := rightVal.Index(j).Interface()
 			result.Diffs = append(result.Diffs, &Diff{
@@ -537,6 +575,98 @@ func compareSlicesWithDeepEqual(path string, leftVal, rightVal reflect.Value, re
 // isBasicKind returns true if the kind is a basic comparable type (numeric, bool, or string)
 func isBasicKind(k reflect.Kind) bool {
 	return k <= reflect.Complex128 || k == reflect.String
+}
+
+// isNumericKind returns true if the kind is a numeric type (int, uint, float, complex)
+func isNumericKind(k reflect.Kind) bool {
+	return (k >= reflect.Int && k <= reflect.Float64) || k == reflect.Complex64 || k == reflect.Complex128
+}
+
+// isIntegerKind returns true if the kind is an integer type
+func isIntegerKind(k reflect.Kind) bool {
+	return k >= reflect.Int && k <= reflect.Uintptr
+}
+
+// isFloatKind returns true if the kind is a floating-point type
+func isFloatKind(k reflect.Kind) bool {
+	return k == reflect.Float32 || k == reflect.Float64
+}
+
+// numericValuesEqual compares two numeric values across different types
+func numericValuesEqual(leftVal, rightVal reflect.Value) bool {
+	leftKind := leftVal.Kind()
+	rightKind := rightVal.Kind()
+
+	// Both are signed integers
+	if isSignedIntKind(leftKind) && isSignedIntKind(rightKind) {
+		return leftVal.Int() == rightVal.Int()
+	}
+
+	// Both are unsigned integers
+	if isUnsignedIntKind(leftKind) && isUnsignedIntKind(rightKind) {
+		return leftVal.Uint() == rightVal.Uint()
+	}
+
+	// Both are floats
+	if isFloatKind(leftKind) && isFloatKind(rightKind) {
+		return leftVal.Float() == rightVal.Float()
+	}
+
+	// Mixed signed/unsigned integers - need careful comparison
+	if isSignedIntKind(leftKind) && isUnsignedIntKind(rightKind) {
+		leftInt := leftVal.Int()
+		rightUint := rightVal.Uint()
+		if leftInt < 0 {
+			return false
+		}
+		return uint64(leftInt) == rightUint
+	}
+	if isUnsignedIntKind(leftKind) && isSignedIntKind(rightKind) {
+		leftUint := leftVal.Uint()
+		rightInt := rightVal.Int()
+		if rightInt < 0 {
+			return false
+		}
+		return leftUint == uint64(rightInt)
+	}
+
+	// Integer and float comparison
+	if isIntegerKind(leftKind) && isFloatKind(rightKind) {
+		var leftFloat float64
+		if isSignedIntKind(leftKind) {
+			leftFloat = float64(leftVal.Int())
+		} else {
+			leftFloat = float64(leftVal.Uint())
+		}
+		return leftFloat == rightVal.Float()
+	}
+	if isFloatKind(leftKind) && isIntegerKind(rightKind) {
+		var rightFloat float64
+		if isSignedIntKind(rightKind) {
+			rightFloat = float64(rightVal.Int())
+		} else {
+			rightFloat = float64(rightVal.Uint())
+		}
+		return leftVal.Float() == rightFloat
+	}
+
+	// Complex numbers
+	if (leftKind == reflect.Complex64 || leftKind == reflect.Complex128) &&
+		(rightKind == reflect.Complex64 || rightKind == reflect.Complex128) {
+		return leftVal.Complex() == rightVal.Complex()
+	}
+
+	return false
+}
+
+// isSignedIntKind returns true if the kind is a signed integer
+func isSignedIntKind(k reflect.Kind) bool {
+	return k >= reflect.Int && k <= reflect.Int64
+}
+
+// isUnsignedIntKind returns true if the kind is an unsigned integer
+func isUnsignedIntKind(k reflect.Kind) bool {
+	return k >= reflect.Uint && k <= reflect.Uintptr
 }
 
 // compareMaps compares two maps key by keywithout fmt
@@ -570,6 +700,35 @@ func compareMaps(path string, leftVal, rightVal reflect.Value, result *DiffResul
 		rightInterface := rightMapVal.Interface()
 
 		leftValReflect := reflect.ValueOf(leftInterface)
+		rightValReflect := reflect.ValueOf(rightInterface)
+
+		// Check for type mismatch with potential numeric comparison
+		if leftValReflect.Type() != rightValReflect.Type() {
+			if config.CompareNumericValues && isNumericKind(leftValReflect.Kind()) && isNumericKind(rightValReflect.Kind()) {
+				if !numericValuesEqual(leftValReflect, rightValReflect) {
+					result.Diffs = append(result.Diffs, &MapDiff{
+						Diff: Diff{
+							Path:  elementPath,
+							Left:  leftInterface,
+							Right: rightInterface,
+						},
+						Key:        key.Interface(),
+						ChangeType: ChangeTypeUpdated,
+					})
+				}
+			} else {
+				result.Diffs = append(result.Diffs, &MapDiff{
+					Diff: Diff{
+						Path:  elementPath,
+						Left:  leftInterface,
+						Right: rightInterface,
+					},
+					Key:        key.Interface(),
+					ChangeType: ChangeTypeUpdated,
+				})
+			}
+			continue
+		}
 
 		if isBasicKind(leftValReflect.Kind()) {
 			if !reflect.DeepEqual(leftInterface, rightInterface) {
@@ -651,65 +810,11 @@ func hasDiffTag(diffTag, tagValue string) bool {
 	if diffTag == "" {
 		return false
 	}
-	tags := strings.Split(diffTag, ",")
-	for _, tag := range tags {
+	tags := strings.SplitSeq(diffTag, ",")
+	for tag := range tags {
 		if strings.TrimSpace(tag) == tagValue {
 			return true
 		}
 	}
 	return false
-}
-
-// getObjectID attempts to extract an ID from an object using the configured field names or diff:"id" tag
-func getObjectID(obj any, config *CompareConfig) (any, bool) {
-	if obj == nil {
-		return nil, false
-	}
-
-	val := reflect.ValueOf(obj)
-	if val.Kind() == reflect.Pointer {
-		if val.IsNil() {
-			return nil, false
-		}
-		val = val.Elem()
-	}
-
-	if val.Kind() != reflect.Struct {
-		return nil, false
-	}
-
-	typ := val.Type()
-
-	for i := 0; i < typ.NumField(); i++ {
-		field := typ.Field(i)
-		if field.IsExported() {
-			diffTag := field.Tag.Get("diff")
-			if hasDiffTag(diffTag, "id") {
-				fieldValue := val.Field(i)
-				if fieldValue.IsValid() && fieldValue.CanInterface() {
-					id := fieldValue.Interface()
-					if !reflect.DeepEqual(id, reflect.Zero(fieldValue.Type()).Interface()) {
-						return id, true
-					}
-				}
-			}
-		}
-	}
-
-	if config.IDFieldNames != nil {
-		for _, idFieldName := range config.IDFieldNames {
-			field, found := typ.FieldByName(idFieldName)
-			if found && field.IsExported() {
-				fieldValue := val.FieldByName(idFieldName)
-				if fieldValue.IsValid() && fieldValue.CanInterface() {
-					id := fieldValue.Interface()
-					if !reflect.DeepEqual(id, reflect.Zero(fieldValue.Type()).Interface()) {
-						return id, true
-					}
-				}
-			}
-		}
-	}
-
-	return nil, false
 }

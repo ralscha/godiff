@@ -229,12 +229,9 @@ func TestNonComparableSliceElements(t *testing.T) {
 	leftSlice := []NonComparable{{Slice: []int{1}}, {Slice: []int{2}}}
 	rightSlice := []NonComparable{{Slice: []int{1}}, {Slice: []int{3}}}
 
-	config := DefaultCompareConfig()
-	config.IgnoreSliceOrder = true
-
-	result, err := CompareWithConfig(leftSlice, rightSlice, config)
+	result, err := Compare(leftSlice, rightSlice, WithIgnoreSliceOrder())
 	if err != nil {
-		t.Fatalf("CompareWithConfig failed: %v", err)
+		t.Fatalf("Compare failed: %v", err)
 	}
 
 	expectedDiffs := 2
@@ -286,11 +283,9 @@ func TestCompareSlicesByValue2(t *testing.T) {
 		{Name: "A", Value: 1},
 	}
 
-	config := DefaultCompareConfig()
-	config.IgnoreSliceOrder = true
-	result, err := CompareWithConfig(left, right, config)
+	result, err := Compare(left, right, WithIgnoreSliceOrder())
 	if err != nil {
-		t.Fatalf("CompareWithConfig failed: %v", err)
+		t.Fatalf("Compare failed: %v", err)
 	}
 	if result.HasDifferences() {
 		t.Errorf("Expected no differences when order is ignored, but got: %s", result.String())
@@ -300,9 +295,9 @@ func TestCompareSlicesByValue2(t *testing.T) {
 		{Name: "B", Value: 3},
 		{Name: "A", Value: 1},
 	}
-	result, err = CompareWithConfig(left, right, config)
+	result, err = Compare(left, right, WithIgnoreSliceOrder())
 	if err != nil {
-		t.Fatalf("CompareWithConfig failed: %v", err)
+		t.Fatalf("Compare failed: %v", err)
 	}
 	if !result.HasDifferences() {
 		t.Errorf("Expected differences, but got none")
@@ -319,9 +314,9 @@ func TestCompareSlicesByValue2(t *testing.T) {
 		{Name: "B", Value: 2},
 		{Name: "C", Value: 3},
 	}
-	result, err = CompareWithConfig(left, right, config)
+	result, err = Compare(left, right, WithIgnoreSliceOrder())
 	if err != nil {
-		t.Fatalf("CompareWithConfig failed: %v", err)
+		t.Fatalf("Compare failed: %v", err)
 	}
 	if result.Count() != 2 {
 		t.Errorf("Expected 2 diffs, got %d: %s", result.Count(), result.String())
@@ -430,10 +425,7 @@ func TestCompareSlicesByValue(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			config := &CompareConfig{
-				IgnoreSliceOrder: true,
-			}
-			result, err := CompareWithConfig(tt.left, tt.right, config)
+			result, err := Compare(tt.left, tt.right, WithIgnoreSliceOrder())
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}

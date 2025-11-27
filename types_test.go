@@ -983,10 +983,7 @@ func TestInterfaceHandler2(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			config := DefaultCompareConfig()
-			config.TypeHandlers = DefaultTypeHandlers()
-
-			result, err := CompareWithConfig(tt.left, tt.right, config)
+			result, err := Compare(tt.left, tt.right, WithTypeHandlers(DefaultTypeHandlers()))
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -1344,6 +1341,171 @@ func TestChannelHandlerEdgeCases(t *testing.T) {
 		}
 		if len(result.Diffs) != 0 {
 			t.Errorf("Expected no differences for nil channels, got %d", len(result.Diffs))
+		}
+	})
+}
+
+func TestCompareNumericValues(t *testing.T) {
+	tests := []struct {
+		name         string
+		left         any
+		right        any
+		expectedDiff int
+	}{
+		// Same type comparisons (should work without CompareNumericValues)
+		{"int vs int same", int(42), int(42), 0},
+		{"int vs int different", int(42), int(43), 1},
+
+		// Cross-type signed integer comparisons
+		{"int vs int32 same value", int(42), int32(42), 0},
+		{"int vs int64 same value", int(42), int64(42), 0},
+		{"int8 vs int16 same value", int8(42), int16(42), 0},
+		{"int16 vs int32 same value", int16(42), int32(42), 0},
+		{"int32 vs int64 same value", int32(42), int64(42), 0},
+		{"int vs int64 different value", int(42), int64(43), 1},
+
+		// Cross-type unsigned integer comparisons
+		{"uint vs uint32 same value", uint(42), uint32(42), 0},
+		{"uint vs uint64 same value", uint(42), uint64(42), 0},
+		{"uint8 vs uint16 same value", uint8(42), uint16(42), 0},
+		{"uint16 vs uint32 same value", uint16(42), uint32(42), 0},
+		{"uint32 vs uint64 same value", uint32(42), uint64(42), 0},
+		{"uint vs uint64 different value", uint(42), uint64(43), 1},
+
+		// Mixed signed/unsigned integer comparisons
+		{"int vs uint same positive value", int(42), uint(42), 0},
+		{"int32 vs uint32 same value", int32(42), uint32(42), 0},
+		{"int64 vs uint64 same value", int64(42), uint64(42), 0},
+		{"negative int vs uint", int(-1), uint(1), 1},
+		{"int vs uint different value", int(42), uint(43), 1},
+
+		// Float comparisons
+		{"float32 vs float64 same value", float32(3.5), float64(3.5), 0},
+		{"float32 vs float64 different value", float32(3.5), float64(3.6), 1},
+
+		// Integer vs float comparisons
+		{"int vs float64 same value", int(42), float64(42.0), 0},
+		{"int vs float64 different value", int(42), float64(42.5), 1},
+		{"int64 vs float64 same value", int64(100), float64(100.0), 0},
+		{"uint vs float64 same value", uint(42), float64(42.0), 0},
+
+		// Complex number comparisons
+		{"complex64 vs complex128 same value", complex64(1 + 2i), complex128(1 + 2i), 0},
+		{"complex64 vs complex128 different value", complex64(1 + 2i), complex128(1 + 3i), 1},
+
+		// Edge cases
+		{"zero int vs zero uint", int(0), uint(0), 0},
+		{"zero int vs zero float64", int(0), float64(0.0), 0},
+		{"max int8 vs int64", int8(127), int64(127), 0},
+		{"max uint8 vs uint64", uint8(255), uint64(255), 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := Compare(tt.left, tt.right, WithCompareNumericValues())
+			if err != nil {
+				t.Fatalf("Compare failed: %v", err)
+			}
+
+			if len(result.Diffs) != tt.expectedDiff {
+				t.Errorf("Expected %d differences, got %d: %s", tt.expectedDiff, len(result.Diffs), result.String())
+			}
+		})
+	}
+}
+
+func TestCompareNumericValuesDisabled(t *testing.T) {
+	// When CompareNumericValues is false (default), different numeric types should be considered different
+	tests := []struct {
+		name         string
+		left         any
+		right        any
+		expectedDiff int
+	}{
+		{"int vs int64 same value", int(42), int64(42), 1},
+		{"int vs uint same value", int(42), uint(42), 1},
+		{"float32 vs float64 same value", float32(3.5), float64(3.5), 1},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// CompareNumericValues is false by default when using Compare without options
+
+			result, err := Compare(tt.left, tt.right)
+			if err != nil {
+				t.Fatalf("Compare failed: %v", err)
+			}
+
+			if len(result.Diffs) != tt.expectedDiff {
+				t.Errorf("Expected %d differences, got %d: %s", tt.expectedDiff, len(result.Diffs), result.String())
+			}
+		})
+	}
+}
+
+func TestCompareNumericValuesInMaps(t *testing.T) {
+	t.Run("maps with different numeric types but same values", func(t *testing.T) {
+		left := map[string]any{
+			"count":  int(42),
+			"price":  float32(19.99),
+			"amount": int64(100),
+		}
+		right := map[string]any{
+			"count":  int64(42),
+			"price":  float64(19.99),
+			"amount": uint(100),
+		}
+
+		result, err := Compare(left, right, WithCompareNumericValues())
+		if err != nil {
+			t.Fatalf("Compare failed: %v", err)
+		}
+
+		// float32(19.99) and float64(19.99) may have precision differences
+		// so we check that at least count and amount are equal
+		// The exact number of diffs depends on float precision
+		if len(result.Diffs) > 1 {
+			t.Errorf("Expected at most 1 difference (due to float precision), got %d: %s", len(result.Diffs), result.String())
+		}
+	})
+
+	t.Run("maps with different numeric types without CompareNumericValues", func(t *testing.T) {
+		left := map[string]any{
+			"count": int(42),
+		}
+		right := map[string]any{
+			"count": int64(42),
+		}
+
+		// CompareNumericValues is false by default when using Compare without options
+
+		result, err := Compare(left, right)
+		if err != nil {
+			t.Fatalf("Compare failed: %v", err)
+		}
+
+		if len(result.Diffs) != 1 {
+			t.Errorf("Expected 1 difference, got %d: %s", len(result.Diffs), result.String())
+		}
+	})
+}
+
+func TestCompareNumericValuesInStructs(t *testing.T) {
+	type Container struct {
+		Value any
+	}
+
+	t.Run("structs with different numeric types but same values", func(t *testing.T) {
+		left := Container{Value: int(42)}
+		right := Container{Value: int64(42)}
+
+		result, err := Compare(left, right, WithCompareNumericValues())
+		if err != nil {
+			t.Fatalf("Compare failed: %v", err)
+		}
+
+		if len(result.Diffs) != 0 {
+			t.Errorf("Expected no differences, got %d: %s", len(result.Diffs), result.String())
 		}
 	})
 }

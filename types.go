@@ -8,10 +8,9 @@ import (
 type ChangeType string
 
 const (
-	ChangeTypeAdded      ChangeType = "ADDED"
-	ChangeTypeRemoved    ChangeType = "REMOVED"
-	ChangeTypeUpdated    ChangeType = "UPDATED"
-	ChangeTypeIDMismatch ChangeType = "ID_MISMATCH"
+	ChangeTypeAdded   ChangeType = "ADDED"
+	ChangeTypeRemoved ChangeType = "REMOVED"
+	ChangeTypeUpdated ChangeType = "UPDATED"
 )
 
 // Diff represents a single difference between two values
@@ -85,12 +84,12 @@ func (dr *DiffResult) AddMapDiff(path string, key, left, right any, changeType C
 type CompareConfig struct {
 	// IgnoreFields is a list of field paths to ignore during comparison (e.g., "User.Password").
 	IgnoreFields []string
-	// IDFieldNames is a list of field names to use as unique identifiers for matching structs.
-	// This is only used if a struct does not have a `diff:"id"` tag.
-	// By default, this is empty.
-	IDFieldNames []string
 	// IgnoreSliceOrder, if true, ignores element order when comparing slices.
 	IgnoreSliceOrder bool
+	// CompareNumericValues, if true, compares numeric values across different types.
+	// For example, int(1) and int64(1) would be considered equal.
+	// This applies to all integer and floating-point types.
+	CompareNumericValues bool
 	// CustomComparators is a map of custom comparison functions for specific types.
 	CustomComparators map[reflect.Type]func(left, right any, config *CompareConfig) (bool, error)
 	// TypeHandlers is a list of handlers for comparing custom or complex types.
@@ -115,7 +114,6 @@ type TypeHandler interface {
 func DefaultCompareConfig() *CompareConfig {
 	return &CompareConfig{
 		IgnoreFields:     []string{},
-		IDFieldNames:     []string{},
 		IgnoreSliceOrder: false,
 		TypeHandlers:     DefaultTypeHandlers(),
 		visitedPairs:     make(map[[2]uintptr]bool),

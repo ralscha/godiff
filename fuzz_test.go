@@ -261,7 +261,7 @@ func FuzzCompareWithNils(f *testing.F) {
 	})
 }
 
-func FuzzCompareWithConfig(f *testing.F) {
+func FuzzCompareWithOptions(f *testing.F) {
 	f.Add("left", "right", true)
 	f.Add("same", "same", false)
 
@@ -273,12 +273,15 @@ func FuzzCompareWithConfig(f *testing.F) {
 			rightStr = rightStr[:100]
 		}
 
-		config := DefaultCompareConfig()
-		config.IgnoreSliceOrder = ignoreSliceOrder
-
-		result, err := CompareWithConfig(leftStr, rightStr, config)
+		var result *DiffResult
+		var err error
+		if ignoreSliceOrder {
+			result, err = Compare(leftStr, rightStr, WithIgnoreSliceOrder())
+		} else {
+			result, err = Compare(leftStr, rightStr)
+		}
 		if err != nil {
-			t.Fatalf("CompareWithConfig failed with strings %q and %q: %v", leftStr, rightStr, err)
+			t.Fatalf("Compare failed with strings %q and %q: %v", leftStr, rightStr, err)
 		}
 
 		if result == nil {

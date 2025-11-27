@@ -23,7 +23,39 @@ type Address struct {
 	Country string
 }
 
+type Person struct {
+	Name string
+	Age  int
+}
+
 func main() {
+
+	// Readme example
+	person1 := Person{Name: "Alice", Age: 30}
+	person2 := Person{Name: "Bob", Age: 30}
+
+	result, err := godiff.Compare(person1, person2)
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Println("Has Differences:", result.HasDifferences())
+	fmt.Println("Total differences:", result.Count())
+	for _, diff := range result.Diffs {
+		switch d := diff.(type) {
+		case *godiff.MapDiff:
+			// For map diffs
+		case *godiff.SliceDiff:
+			// For slice diffs
+		case *godiff.StructDiff:
+			fmt.Println("StructDiff - Field:", d.FieldName, "ChangeType:", d.ChangeType, "Left:", d.Left, "Right:", d.Right)
+		case *godiff.Diff:
+			// For primitive diffs
+		}
+	}
+	fmt.Println("JSON Output:", result.ToJSON())
+	fmt.Println(result.String())
+
 	// Example 1: Basic types
 	fmt.Println("1. Comparing basic types:")
 	result1, _ := godiff.Compare("hello", "world")
@@ -126,8 +158,8 @@ func main() {
 	fmt.Println("9. Comparing time values:")
 	time1 := time.Date(2023, 1, 1, 12, 0, 0, 0, time.UTC)
 	time2 := time.Date(2023, 1, 1, 12, 0, 1, 0, time.UTC) // 1-second difference
-	result10, _ := godiff.Compare(time1, time2)
-	fmt.Println(result10.String())
+	result9, _ := godiff.Compare(time1, time2)
+	fmt.Println(result9.String())
 	fmt.Println()
 
 	// Example 10: Interface comparison with InterfaceHandler
@@ -135,24 +167,24 @@ func main() {
 	var iface1, iface2 any
 	iface1 = "hello"
 	iface2 = "world"
-	result11, _ := godiff.Compare(iface1, iface2)
-	fmt.Println(result11.String())
+	result10, _ := godiff.Compare(iface1, iface2)
+	fmt.Println(result10.String())
 	fmt.Println()
 
 	// Example 11: Function comparison with FunctionHandler
 	fmt.Println("11. Comparing function references:")
 	func1 := func() { fmt.Println("Function 1") }
 	func2 := func() { fmt.Println("Function 2") }
-	result12, _ := godiff.Compare(func1, func2)
-	fmt.Println(result12.String())
+	result11, _ := godiff.Compare(func1, func2)
+	fmt.Println(result11.String())
 	fmt.Println()
 
 	// Example 12: Nil vs value comparisons
 	fmt.Println("12. Comparing nil vs values:")
-	result13a, _ := godiff.Compare(nil, "value")
-	result13b, _ := godiff.Compare("value", nil)
-	fmt.Println("nil -> value:", result13a.String())
-	fmt.Println("value -> nil:", result13b.String())
+	result12a, _ := godiff.Compare(nil, "value")
+	result12b, _ := godiff.Compare("value", nil)
+	fmt.Println("nil -> value:", result12a.String())
+	fmt.Println("value -> nil:", result12b.String())
 	fmt.Println()
 
 	// Example 13: Complex nested structure
@@ -191,8 +223,8 @@ func main() {
 		PointerField: &rightUser,
 	}
 
-	result14, _ := godiff.Compare(leftComplex, rightComplex)
-	fmt.Println(result14.String())
+	result13, _ := godiff.Compare(leftComplex, rightComplex)
+	fmt.Println(result13.String())
 	fmt.Println()
 
 	// Example 14: Custom comparator example
@@ -214,29 +246,50 @@ func main() {
 		return leftVal.Value[:3] == rightVal.Value[:3], nil
 	}
 
-	customConfig := godiff.DefaultCompareConfig()
-	customConfig.CustomComparators = map[reflect.Type]func(left, right any, config *godiff.CompareConfig) (bool, error){
-		reflect.TypeOf(CustomType{}): customComparator,
-	}
-
 	leftCustom := CustomType{Value: "hello world"}
 	rightCustom := CustomType{Value: "help me please"}
-	result15, _ := godiff.CompareWithConfig(leftCustom, rightCustom, customConfig)
-	fmt.Println(result15.String())
+	result14, _ := godiff.Compare(leftCustom, rightCustom,
+		godiff.WithCustomComparators(map[reflect.Type]func(left, right any, config *godiff.CompareConfig) (bool, error){
+			reflect.TypeOf(CustomType{}): customComparator,
+		}),
+	)
+	fmt.Println(result14.String())
 	fmt.Println()
 
 	// Example 15: Channel comparison with ChannelHandler
 	fmt.Println("15. Comparing channels:")
 	ch1 := make(chan int, 5)
 	ch2 := make(chan int, 5)
-	result16a, _ := godiff.Compare(ch1, ch2)
-	result16b, _ := godiff.Compare(ch1, ch1)
-	fmt.Println("Different channels:", result16a.String())
-	fmt.Println("Same channel:", result16b.String())
+	result15a, _ := godiff.Compare(ch1, ch2)
+	result15b, _ := godiff.Compare(ch1, ch1)
+	fmt.Println("Different channels:", result15a.String())
+	fmt.Println("Same channel:", result15b.String())
 	fmt.Println()
 
-	// Example 16: Output methods demonstration
-	fmt.Println("16. Output methods demonstration:")
+	// Example 16: Comparing numeric values across different types
+	fmt.Println("16. Comparing numeric values across different types:")
+	var intVal = 42
+	var floatVal = 42.0
+	var int32Val int32 = 42
+
+	// Without WithCompareNumericValues - types differ, so they are reported as different
+	result16a, _ := godiff.Compare(intVal, floatVal)
+	fmt.Println("int vs float64 (without WithCompareNumericValues):", result16a.String())
+
+	// With WithCompareNumericValues - values are compared numerically
+	result16b, _ := godiff.Compare(intVal, floatVal, godiff.WithCompareNumericValues())
+	fmt.Println("int vs float64 (with WithCompareNumericValues):", result16b.String())
+
+	result16c, _ := godiff.Compare(intVal, int32Val, godiff.WithCompareNumericValues())
+	fmt.Println("int vs int32 (with WithCompareNumericValues):", result16c.String())
+
+	// Different numeric values still show as different
+	result16d, _ := godiff.Compare(42, 43.5, godiff.WithCompareNumericValues())
+	fmt.Println("42 vs 43.5 (with WithCompareNumericValues):", result16d.String())
+	fmt.Println()
+
+	// Example 17: Output methods demonstration
+	fmt.Println("17. Output methods demonstration:")
 	result17, _ := godiff.Compare("hello", "world")
 
 	fmt.Println("String output:")
