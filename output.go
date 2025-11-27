@@ -13,7 +13,7 @@ func (dr *DiffResult) String() string {
 	}
 
 	var sb strings.Builder
-	sb.Grow(30 + len(dr.Diffs)*100)
+	sb.Grow(30 + len(dr.Diffs)*90)
 
 	sb.WriteString(fmt.Sprintf("Found %d differences:\n", len(dr.Diffs)))
 
