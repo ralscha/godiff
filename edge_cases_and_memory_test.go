@@ -130,18 +130,6 @@ func TestEdgeCases(t *testing.T) {
 			t.Error("Expected a StructDiff")
 		}
 	})
-
-	t.Run("Test abs function", func(t *testing.T) {
-		if abs(5) != 5 {
-			t.Errorf("abs(5) should be 5, got %d", abs(5))
-		}
-		if abs(-5) != 5 {
-			t.Errorf("abs(-5) should be 5, got %d", abs(-5))
-		}
-		if abs(0) != 0 {
-			t.Errorf("abs(0) should be 0, got %d", abs(0))
-		}
-	})
 }
 
 func TestMemoryEfficiency(t *testing.T) {
@@ -337,4 +325,56 @@ func TestComparePointersEdgeCases(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestMaxDepth(t *testing.T) {
+	type Level3 struct {
+		Value string
+	}
+	type Level2 struct {
+		Level3 Level3
+	}
+	type Level1 struct {
+		Level2 Level2
+	}
+	type Root struct {
+		Level1 Level1
+	}
+
+	left := Root{Level1: Level1{Level2: Level2{Level3: Level3{Value: "left"}}}}
+	right := Root{Level1: Level1{Level2: Level2{Level3: Level3{Value: "right"}}}}
+
+	t.Run("unlimited depth finds all differences", func(t *testing.T) {
+		result, err := Compare(left, right)
+		if err != nil {
+			t.Fatalf("Compare failed: %v", err)
+		}
+		if len(result.Diffs) == 0 {
+			t.Error("Expected differences to be found with unlimited depth")
+		}
+	})
+
+	t.Run("depth 1 stops at first level", func(t *testing.T) {
+		config := DefaultCompareConfig()
+		config.MaxDepth = 1
+		result, err := CompareWithConfig(left, right, config)
+		if err != nil {
+			t.Fatalf("CompareWithConfig failed: %v", err)
+		}
+		if len(result.Diffs) != 0 {
+			t.Errorf("Expected no differences at depth 1, got %d", len(result.Diffs))
+		}
+	})
+
+	t.Run("depth 4 finds nested differences", func(t *testing.T) {
+		config := DefaultCompareConfig()
+		config.MaxDepth = 5
+		result, err := CompareWithConfig(left, right, config)
+		if err != nil {
+			t.Fatalf("CompareWithConfig failed: %v", err)
+		}
+		if len(result.Diffs) == 0 {
+			t.Error("Expected differences to be found at depth 5")
+		}
+	})
 }

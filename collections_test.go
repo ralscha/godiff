@@ -607,7 +607,7 @@ func TestCompareSlicesAdvanced(t *testing.T) {
 			leftVal := reflect.ValueOf(tt.left)
 			rightVal := reflect.ValueOf(tt.right)
 
-			err := compareSlicesAdvanced("test", leftVal, rightVal, result, DefaultCompareConfig())
+			err := compareSlicesAdvanced("test", leftVal, rightVal, result)
 			if err != nil {
 				t.Fatalf("compareSlicesAdvanced failed: %v", err)
 			}

@@ -79,7 +79,9 @@ func (dr *DiffResult) AddMapDiff(path string, key, left, right any, changeType C
 	})
 }
 
-// CompareConfig holds configuration options for the comparison
+// CompareConfig holds configuration options for the comparison.
+// Note: CompareConfig is not thread-safe. Do not share a single config instance
+// across multiple concurrent Compare calls.
 type CompareConfig struct {
 	// IgnoreFields is a list of field paths to ignore during comparison (e.g., "User.Password").
 	IgnoreFields []string
@@ -93,8 +95,14 @@ type CompareConfig struct {
 	CustomComparators map[reflect.Type]func(left, right any, config *CompareConfig) (bool, error)
 	// TypeHandlers is a list of handlers for comparing custom or complex types.
 	TypeHandlers []TypeHandler
+	// MaxDepth limits the recursion depth for comparison. 0 means unlimited.
+	MaxDepth int
 	// visitedPairs tracks visited pointer pairs for cycle detection (internal use only)
 	visitedPairs map[[2]uintptr]bool
+	// ignoreFieldsSet is a pre-computed set for O(1) lookup (internal use only)
+	ignoreFieldsSet map[string]bool
+	// currentDepth tracks the current recursion depth (internal use only)
+	currentDepth int
 }
 
 // TypeHandler defines an interface for handling specific types during comparison

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -20,6 +21,14 @@ func CompareWithConfig(left, right any, config *CompareConfig) (*DiffResult, err
 	if config.visitedPairs == nil {
 		config.visitedPairs = make(map[[2]uintptr]bool)
 	}
+
+	if config.ignoreFieldsSet == nil && len(config.IgnoreFields) > 0 {
+		config.ignoreFieldsSet = make(map[string]bool, len(config.IgnoreFields))
+		for _, field := range config.IgnoreFields {
+			config.ignoreFieldsSet[field] = true
+		}
+	}
+	config.currentDepth = 0
 	result := &DiffResult{}
 	err := compareValues("", left, right, result, config)
 	if err != nil {
@@ -50,7 +59,17 @@ func handleInvalidValues(path string, left, right any, leftVal, rightVal reflect
 
 // compareValues recursively compares two values and records differences
 func compareValues(path string, left, right any, result *DiffResult, config *CompareConfig) error {
-	if slices.Contains(config.IgnoreFields, path) {
+	if config.MaxDepth > 0 && config.currentDepth >= config.MaxDepth {
+		return nil
+	}
+	config.currentDepth++
+	defer func() { config.currentDepth-- }()
+
+	if config.ignoreFieldsSet != nil {
+		if config.ignoreFieldsSet[path] {
+			return nil
+		}
+	} else if slices.Contains(config.IgnoreFields, path) {
 		return nil
 	}
 
@@ -151,20 +170,37 @@ func isFieldIgnored(fieldPath string, fieldName string, structType reflect.Type,
 		return false
 	}
 
-	// Check exact field path match (e.g., "User.Meta" matches "User.Meta")
+	if config.ignoreFieldsSet != nil {
+		if config.ignoreFieldsSet[fieldPath] {
+			return true
+		}
+
+		if config.ignoreFieldsSet[fieldName] {
+			return true
+		}
+
+		structTypeName := structType.Name()
+		if structTypeName != "" {
+			typeQualifiedName := structTypeName + "." + fieldName
+			if config.ignoreFieldsSet[typeQualifiedName] {
+				return true
+			}
+		}
+		return false
+	}
+
+	// Fall back to slice search
 	if slices.Contains(config.IgnoreFields, fieldPath) {
 		return true
 	}
 
-	// Check simple field name match (e.g., "Meta" matches any field named Meta)
 	if slices.Contains(config.IgnoreFields, fieldName) {
 		return true
 	}
 
-	// Check type-qualified field name match (e.g., "MyStruct.Meta" matches Meta field in MyStruct type)
 	structTypeName := structType.Name()
 	if structTypeName != "" {
-		typeQualifiedName := fmt.Sprintf("%s.%s", structTypeName, fieldName)
+		typeQualifiedName := structTypeName + "." + fieldName
 		if slices.Contains(config.IgnoreFields, typeQualifiedName) {
 			return true
 		}
@@ -203,11 +239,11 @@ func compareStructs(path string, leftVal, rightVal reflect.Value, result *DiffRe
 			continue
 		}
 
-		fieldPath := path
-		if fieldPath == "" {
+		var fieldPath string
+		if path == "" {
 			fieldPath = field.Name
 		} else {
-			fieldPath = fmt.Sprintf("%s.%s", path, field.Name)
+			fieldPath = path + "." + field.Name
 		}
 
 		diffTag := field.Tag.Get("diff")
@@ -231,6 +267,9 @@ func compareStructs(path string, leftVal, rightVal reflect.Value, result *DiffRe
 					CustomComparators: config.CustomComparators,
 					TypeHandlers:      config.TypeHandlers,
 					visitedPairs:      config.visitedPairs,
+					ignoreFieldsSet:   config.ignoreFieldsSet,
+					MaxDepth:          config.MaxDepth,
+					currentDepth:      config.currentDepth,
 				}
 			}
 
@@ -239,15 +278,15 @@ func compareStructs(path string, leftVal, rightVal reflect.Value, result *DiffRe
 				return err
 			}
 		} else {
-			if !reflect.DeepEqual(leftFieldInterface, rightFieldInterface) {
-				leftKind := leftField.Kind()
-				if leftKind == reflect.Pointer || leftKind == reflect.Struct ||
-					leftKind == reflect.Map || leftKind == reflect.Interface {
-					err := compareValues(fieldPath, leftFieldInterface, rightFieldInterface, result, config)
-					if err != nil {
-						return err
-					}
-				} else {
+			leftKind := leftField.Kind()
+			if leftKind == reflect.Pointer || leftKind == reflect.Struct ||
+				leftKind == reflect.Map || leftKind == reflect.Interface {
+				err := compareValues(fieldPath, leftFieldInterface, rightFieldInterface, result, config)
+				if err != nil {
+					return err
+				}
+			} else {
+				if !reflect.DeepEqual(leftFieldInterface, rightFieldInterface) {
 					result.Diffs = append(result.Diffs, &StructDiff{
 						Diff: Diff{
 							Path:  fieldPath,
@@ -267,7 +306,7 @@ func compareStructs(path string, leftVal, rightVal reflect.Value, result *DiffRe
 // compareSlices compares two slices using appropriate algorithm based on configuration
 func compareSlices(path string, leftVal, rightVal reflect.Value, result *DiffResult, config *CompareConfig) error {
 	if config.IgnoreSliceOrder {
-		return compareSlicesAdvanced(path, leftVal, rightVal, result, config)
+		return compareSlicesAdvanced(path, leftVal, rightVal, result)
 	}
 
 	leftLen := leftVal.Len()
@@ -289,8 +328,7 @@ func compareSlices(path string, leftVal, rightVal reflect.Value, result *DiffRes
 
 		if hasLeftElem && hasRightElem {
 			leftElemVal := reflect.ValueOf(leftElem)
-			isBasicType := leftElemVal.Kind() <= reflect.Complex128 || leftElemVal.Kind() == reflect.String
-			if isBasicType && !reflect.DeepEqual(leftElem, rightElem) {
+			if isBasicKind(leftElemVal.Kind()) && !reflect.DeepEqual(leftElem, rightElem) {
 				result.Diffs = append(result.Diffs, &SliceDiff{
 					Diff: Diff{
 						Path:  path,
@@ -301,7 +339,7 @@ func compareSlices(path string, leftVal, rightVal reflect.Value, result *DiffRes
 					ChangeType: ChangeTypeUpdated,
 				})
 			} else {
-				elementPath := fmt.Sprintf("%s[%d]", path, i)
+				elementPath := path + "[" + itoa(i) + "]"
 				err := compareValues(elementPath, leftElem, rightElem, result, config)
 				if err != nil {
 					return err
@@ -335,7 +373,7 @@ func compareSlices(path string, leftVal, rightVal reflect.Value, result *DiffRes
 }
 
 // compareSlicesAdvanced compares slices using ID-based matching or value-based matching
-func compareSlicesAdvanced(path string, leftVal, rightVal reflect.Value, result *DiffResult, config *CompareConfig) error {
+func compareSlicesAdvanced(path string, leftVal, rightVal reflect.Value, result *DiffResult) error {
 
 	if !leftVal.IsValid() && !rightVal.IsValid() {
 		return nil
@@ -494,18 +532,21 @@ func compareSlicesWithDeepEqual(path string, leftVal, rightVal reflect.Value, re
 	return compareSlicesUnordered(path, leftVal, rightVal, result)
 }
 
-func abs(x int) int {
-	if x < 0 {
-		return -x
-	}
-	return x
+// isBasicKind returns true if the kind is a basic comparable type (numeric, bool, or string)
+func isBasicKind(k reflect.Kind) bool {
+	return k <= reflect.Complex128 || k == reflect.String
+}
+
+// compareMaps compares two maps key by keywithout fmt
+func itoa(i int) string {
+	return strconv.Itoa(i)
 }
 
 // compareMaps compares two maps key by key
 func compareMaps(path string, leftVal, rightVal reflect.Value, result *DiffResult, config *CompareConfig) error {
 	for _, key := range leftVal.MapKeys() {
 		keyStr := fmt.Sprintf("%v", key.Interface())
-		elementPath := fmt.Sprintf("%s[%s]", path, keyStr)
+		elementPath := path + "[" + keyStr + "]"
 
 		rightMapVal := rightVal.MapIndex(key)
 		leftMapVal := leftVal.MapIndex(key)
@@ -527,9 +568,8 @@ func compareMaps(path string, leftVal, rightVal reflect.Value, result *DiffResul
 		rightInterface := rightMapVal.Interface()
 
 		leftValReflect := reflect.ValueOf(leftInterface)
-		isBasicType := leftValReflect.Kind() <= reflect.Complex128 || leftValReflect.Kind() == reflect.String
 
-		if isBasicType {
+		if isBasicKind(leftValReflect.Kind()) {
 			if !reflect.DeepEqual(leftInterface, rightInterface) {
 				result.Diffs = append(result.Diffs, &MapDiff{
 					Diff: Diff{
@@ -558,7 +598,7 @@ func compareMaps(path string, leftVal, rightVal reflect.Value, result *DiffResul
 	for _, key := range rightVal.MapKeys() {
 		if !leftVal.MapIndex(key).IsValid() {
 			keyStr := fmt.Sprintf("%v", key.Interface())
-			elementPath := fmt.Sprintf("%s[%s]", path, keyStr)
+			elementPath := path + "[" + keyStr + "]"
 
 			result.Diffs = append(result.Diffs, &MapDiff{
 				Diff: Diff{
