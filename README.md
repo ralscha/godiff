@@ -86,21 +86,14 @@ result, err := godiff.Compare(left, right,
 ```go
 type Product struct {
     Name   string
-    Tags   []string `diff:"ignoreOrder"` // Compare without order
+    Tags   []string `diff:"ignoreOrder"` // Compare ignoring order
     Secret string   `diff:"ignore"`      // Skip this field
 }
 ```
 
-### Result Methods
-
-```go
-result.HasDifferences() // bool
-result.Count()          // int
-result.String()         // human-readable output
-result.ToJSON()         // JSON output
-```
-
 ## Demo
+
+See the demo application for more examples:
 
 ```bash
 go run cmd/demo/main.go
