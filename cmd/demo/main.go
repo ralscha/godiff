@@ -2,9 +2,10 @@ package main
 
 import (
 	"fmt"
-	"godiff"
 	"reflect"
 	"time"
+
+	"github.com/ralscha/godiff"
 )
 
 type User struct {
