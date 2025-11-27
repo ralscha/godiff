@@ -368,4 +368,4 @@ go run cmd/demo/main.go
 
 ## License
 
-Apache License 2.0 - See LICENSE file for details.
+MIT - See LICENSE file for details.
