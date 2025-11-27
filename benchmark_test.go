@@ -40,6 +40,7 @@ func createLargeBenchmarkStruct(id int) BenchmarkStruct {
 }
 
 func BenchmarkCompareBasicTypes(b *testing.B) {
+	b.ReportAllocs()
 	left := "hello"
 	right := "world"
 
@@ -49,6 +50,7 @@ func BenchmarkCompareBasicTypes(b *testing.B) {
 }
 
 func BenchmarkCompareStructs(b *testing.B) {
+	b.ReportAllocs()
 	left := createLargeBenchmarkStruct(1)
 	right := createLargeBenchmarkStruct(2)
 
@@ -58,6 +60,7 @@ func BenchmarkCompareStructs(b *testing.B) {
 }
 
 func BenchmarkCompareSlices(b *testing.B) {
+	b.ReportAllocs()
 	left := make([]int, 100)
 	right := make([]int, 100)
 
@@ -72,6 +75,7 @@ func BenchmarkCompareSlices(b *testing.B) {
 }
 
 func BenchmarkCompareSlicesWithIgnoreOrder(b *testing.B) {
+	b.ReportAllocs()
 	type TestStruct struct {
 		Items []int `diff:"ignoreOrder"`
 	}
@@ -90,6 +94,7 @@ func BenchmarkCompareSlicesWithIgnoreOrder(b *testing.B) {
 }
 
 func BenchmarkCompareLargeStructSlices(b *testing.B) {
+	b.ReportAllocs()
 	left := make([]BenchmarkStruct, 50)
 	right := make([]BenchmarkStruct, 50)
 
@@ -104,6 +109,7 @@ func BenchmarkCompareLargeStructSlices(b *testing.B) {
 }
 
 func BenchmarkCompareMaps(b *testing.B) {
+	b.ReportAllocs()
 	left := make(map[string]int)
 	right := make(map[string]int)
 
@@ -119,6 +125,7 @@ func BenchmarkCompareMaps(b *testing.B) {
 }
 
 func BenchmarkCompareIdentical(b *testing.B) {
+	b.ReportAllocs()
 	data := createLargeBenchmarkStruct(1)
 
 	for b.Loop() {
@@ -127,6 +134,7 @@ func BenchmarkCompareIdentical(b *testing.B) {
 }
 
 func BenchmarkStringGeneration(b *testing.B) {
+	b.ReportAllocs()
 	left := createLargeBenchmarkStruct(1)
 	right := createLargeBenchmarkStruct(2)
 
@@ -138,6 +146,7 @@ func BenchmarkStringGeneration(b *testing.B) {
 }
 
 func BenchmarkJSONGeneration(b *testing.B) {
+	b.ReportAllocs()
 	left := createLargeBenchmarkStruct(1)
 	right := createLargeBenchmarkStruct(2)
 
