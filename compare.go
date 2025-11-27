@@ -59,11 +59,13 @@ func handleInvalidValues(path string, left, right any, leftVal, rightVal reflect
 
 // compareValues recursively compares two values and records differences
 func compareValues(path string, left, right any, result *DiffResult, config *CompareConfig) error {
-	if config.MaxDepth > 0 && config.currentDepth >= config.MaxDepth {
-		return nil
+	if config.MaxDepth > 0 {
+		if config.currentDepth >= config.MaxDepth {
+			return nil
+		}
+		config.currentDepth++
+		defer func() { config.currentDepth-- }()
 	}
-	config.currentDepth++
-	defer func() { config.currentDepth-- }()
 
 	if config.ignoreFieldsSet != nil {
 		if config.ignoreFieldsSet[path] {
@@ -278,15 +280,15 @@ func compareStructs(path string, leftVal, rightVal reflect.Value, result *DiffRe
 				return err
 			}
 		} else {
-			leftKind := leftField.Kind()
-			if leftKind == reflect.Pointer || leftKind == reflect.Struct ||
-				leftKind == reflect.Map || leftKind == reflect.Interface {
-				err := compareValues(fieldPath, leftFieldInterface, rightFieldInterface, result, config)
-				if err != nil {
-					return err
-				}
-			} else {
-				if !reflect.DeepEqual(leftFieldInterface, rightFieldInterface) {
+			if !reflect.DeepEqual(leftFieldInterface, rightFieldInterface) {
+				leftKind := leftField.Kind()
+				if leftKind == reflect.Pointer || leftKind == reflect.Struct ||
+					leftKind == reflect.Map || leftKind == reflect.Interface {
+					err := compareValues(fieldPath, leftFieldInterface, rightFieldInterface, result, config)
+					if err != nil {
+						return err
+					}
+				} else {
 					result.Diffs = append(result.Diffs, &StructDiff{
 						Diff: Diff{
 							Path:  fieldPath,

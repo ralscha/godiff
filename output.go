@@ -13,7 +13,28 @@ func (dr *DiffResult) String() string {
 	}
 
 	var sb strings.Builder
-	sb.Grow(30 + len(dr.Diffs)*100)
+	const avgBytesPerDiff = 80
+	const changeTypeOverhead = 10
+	estimatedSize := 30 + (len(dr.Diffs) * (avgBytesPerDiff + changeTypeOverhead))
+
+	for _, diff := range dr.Diffs {
+		switch d := diff.(type) {
+		case *Diff:
+			if len(d.Path) > 20 {
+				estimatedSize += len(d.Path) * 2
+			}
+		case *StructDiff:
+			if len(d.Path) > 20 {
+				estimatedSize += len(d.Path) * 2
+			}
+			if len(d.FieldName) > 10 {
+				estimatedSize += len(d.FieldName)
+			}
+		case *SliceDiff, *MapDiff:
+			estimatedSize += 20
+		}
+	}
+	sb.Grow(estimatedSize)
 
 	sb.WriteString(fmt.Sprintf("Found %d differences:\n", len(dr.Diffs)))
 
