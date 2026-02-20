@@ -250,7 +250,7 @@ func TestCustomComparator(t *testing.T) {
 	}
 
 	comparators := map[reflect.Type]func(left, right any, config *CompareConfig) (bool, error){
-		reflect.TypeOf(CustomType{}): customComparator,
+		reflect.TypeFor[CustomType](): customComparator,
 	}
 
 	t.Run("Custom comparator finds no difference when first 3 chars match", func(t *testing.T) {
@@ -462,7 +462,7 @@ func TestIsFieldIgnoredEdgeCases(t *testing.T) {
 	config := &CompareConfig{
 		IgnoreFields: []string{"Field", "TestStruct.Field", "OtherField"},
 	}
-	typ := reflect.TypeOf(TestStruct{})
+	typ := reflect.TypeFor[TestStruct]()
 
 	tests := []struct {
 		name      string

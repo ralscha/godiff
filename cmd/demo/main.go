@@ -250,7 +250,7 @@ func main() {
 	rightCustom := CustomType{Value: "help me please"}
 	result14, _ := godiff.Compare(leftCustom, rightCustom,
 		godiff.WithCustomComparators(map[reflect.Type]func(left, right any, config *godiff.CompareConfig) (bool, error){
-			reflect.TypeOf(CustomType{}): customComparator,
+			reflect.TypeFor[CustomType](): customComparator,
 		}),
 	)
 	fmt.Println(result14.String())

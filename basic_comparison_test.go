@@ -724,7 +724,7 @@ func TestCompareValuesEdgeCases(t *testing.T) {
 		result := &DiffResult{}
 		config := DefaultCompareConfig()
 		config.CustomComparators = map[reflect.Type]func(left, right any, config *CompareConfig) (bool, error){
-			reflect.TypeOf(""): func(left, right any, config *CompareConfig) (bool, error) {
+			reflect.TypeFor[string](): func(left, right any, config *CompareConfig) (bool, error) {
 				return left == right, nil
 			},
 		}

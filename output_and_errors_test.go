@@ -98,7 +98,7 @@ func TestCustomComparatorErrors(t *testing.T) {
 	}
 
 	comparators := map[reflect.Type]func(left, right any, config *CompareConfig) (bool, error){
-		reflect.TypeOf(ErrorType{}): errorComparator,
+		reflect.TypeFor[ErrorType](): errorComparator,
 	}
 
 	left := ErrorType{Value: "test1"}
@@ -212,7 +212,7 @@ type SpecialString string
 type SpecialStringHandler struct{}
 
 func (h *SpecialStringHandler) CanHandle(typ reflect.Type) bool {
-	return typ == reflect.TypeOf(SpecialString(""))
+	return typ == reflect.TypeFor[SpecialString]()
 }
 
 func (h *SpecialStringHandler) Compare(left, right any, path string, result *DiffResult, config *CompareConfig) error {
@@ -267,7 +267,7 @@ type ErrorType struct {
 type ErrorHandler struct{}
 
 func (h *ErrorHandler) CanHandle(typ reflect.Type) bool {
-	return typ == reflect.TypeOf(ErrorType{})
+	return typ == reflect.TypeFor[ErrorType]()
 }
 
 func (h *ErrorHandler) Compare(left, right any, path string, result *DiffResult, config *CompareConfig) error {

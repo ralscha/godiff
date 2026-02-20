@@ -145,7 +145,7 @@ func compareValues(path string, left, right any, result *DiffResult, config *Com
 
 	if leftType != rightType {
 		// Special case: nil pointers of different types are considered equal
-		if leftVal.Kind() == reflect.Ptr && rightVal.Kind() == reflect.Ptr &&
+		if leftVal.Kind() == reflect.Pointer && rightVal.Kind() == reflect.Pointer &&
 			leftVal.IsNil() && rightVal.IsNil() {
 			return nil
 		}
@@ -469,12 +469,12 @@ func compareSlicesByValue(path string, leftVal, rightVal reflect.Value, result *
 	leftCounts := make(map[any]int, leftLen)
 	rightCounts := make(map[any]int, rightLen)
 
-	for i := 0; i < leftLen; i++ {
+	for i := range leftLen {
 		elem := leftVal.Index(i).Interface()
 		leftCounts[elem]++
 	}
 
-	for i := 0; i < rightLen; i++ {
+	for i := range rightLen {
 		elem := rightVal.Index(i).Interface()
 		rightCounts[elem]++
 	}

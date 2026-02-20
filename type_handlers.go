@@ -10,7 +10,7 @@ import (
 type TimeHandler struct{}
 
 func (h *TimeHandler) CanHandle(typ reflect.Type) bool {
-	return typ == reflect.TypeOf(time.Time{})
+	return typ == reflect.TypeFor[time.Time]()
 }
 
 func (h *TimeHandler) Compare(left, right any, path string, result *DiffResult, config *CompareConfig) error {
