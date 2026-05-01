@@ -1,3 +1,3 @@
 module github.com/ralscha/godiff
 
-go 1.26.1
+go 1.26.2
