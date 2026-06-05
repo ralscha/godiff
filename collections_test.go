@@ -222,6 +222,36 @@ func TestMapWithDifferentValueTypes(t *testing.T) {
 	}
 }
 
+func TestMapWithNilInterfaceValues(t *testing.T) {
+	leftMap := map[string]any{
+		"a": nil,
+		"b": "keep",
+		"c": nil,
+	}
+	rightMap := map[string]any{
+		"a": "value",
+		"b": "keep",
+		"c": nil,
+	}
+
+	result, err := Compare(leftMap, rightMap)
+	if err != nil {
+		t.Fatalf("Compare failed: %v", err)
+	}
+
+	if len(result.Diffs) != 1 {
+		t.Fatalf("Expected 1 difference, got %d: %s", len(result.Diffs), result.String())
+	}
+
+	mapDiff, ok := result.Diffs[0].(*MapDiff)
+	if !ok {
+		t.Fatalf("Expected MapDiff, got %T", result.Diffs[0])
+	}
+	if mapDiff.Key != "a" || mapDiff.Left != nil || mapDiff.Right != "value" || mapDiff.ChangeType != ChangeTypeUpdated {
+		t.Fatalf("Unexpected map diff: %+v", mapDiff)
+	}
+}
+
 func TestNonComparableSliceElements(t *testing.T) {
 	type NonComparable struct {
 		Slice []int
@@ -265,6 +295,42 @@ func TestNonComparableSliceElements(t *testing.T) {
 	}
 	if !foundAdded {
 		t.Error("Missing addition of element with Slice [3]")
+	}
+}
+
+func TestSliceWithNilInterfaceElements(t *testing.T) {
+	left := []any{nil, "same"}
+	right := []any{"value", "same"}
+
+	result, err := Compare(left, right)
+	if err != nil {
+		t.Fatalf("Compare failed: %v", err)
+	}
+
+	if len(result.Diffs) != 1 {
+		t.Fatalf("Expected 1 difference, got %d: %s", len(result.Diffs), result.String())
+	}
+
+	sliceDiff, ok := result.Diffs[0].(*SliceDiff)
+	if !ok {
+		t.Fatalf("Expected SliceDiff, got %T", result.Diffs[0])
+	}
+	if sliceDiff.Index != 0 || sliceDiff.Left != nil || sliceDiff.Right != "value" || sliceDiff.ChangeType != ChangeTypeUpdated {
+		t.Fatalf("Unexpected slice diff: %+v", sliceDiff)
+	}
+}
+
+func TestIgnoreOrderSliceWithInterfaceNonComparableElements(t *testing.T) {
+	left := []any{[]int{1, 2}, map[string]int{"a": 1}, "b", "c", "d", "e"}
+	right := []any{"e", "d", "c", "b", map[string]int{"a": 1}, []int{1, 2}}
+
+	result, err := Compare(left, right, WithIgnoreSliceOrder())
+	if err != nil {
+		t.Fatalf("Compare failed: %v", err)
+	}
+
+	if result.HasDifferences() {
+		t.Fatalf("Expected no differences, got: %s", result.String())
 	}
 }
 

@@ -32,7 +32,7 @@ type benchResult struct {
 	allocsPerOp float64
 }
 
-var benchLineRE = regexp.MustCompile(`^(Benchmark[^\s]+)\s+([0-9]+)\s+([0-9]+) ns/op(?:\s+([0-9]+) B/op\s+([0-9]+) allocs/op)?`)
+var benchLineRE = regexp.MustCompile(`^(Benchmark[^\s]+)\s+([0-9]+)\s+([0-9]+(?:\.[0-9]+)?) ns/op(?:\s+([0-9]+(?:\.[0-9]+)?) B/op\s+([0-9]+(?:\.[0-9]+)?) allocs/op)?`)
 
 func parseFile(path string) (map[string]benchResult, error) {
 	f, err := os.Open(path)
@@ -114,7 +114,7 @@ func main() {
 
 	var hadRegression bool
 	fmt.Println("Benchmark regression report (thresholds: time", timeThresh, "bytes", bytesThresh, "allocs", allocsThresh, ")")
-	fmt.Println("Name\tTime(ns/op)Δ%\tBytes(B/op)Δ%\tAllocs(allocs/op)Δ%\tStatus")
+	fmt.Println("Name\tTime(ns/op) delta %\tBytes(B/op) delta %\tAllocs(allocs/op) delta %\tStatus")
 	for name, baseRes := range base {
 		curRes, ok := cur[name]
 		if !ok {

@@ -3,6 +3,7 @@ package godiff
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -15,7 +16,9 @@ func (dr *DiffResult) String() string {
 	var sb strings.Builder
 	sb.Grow(30 + len(dr.Diffs)*90)
 
-	sb.WriteString(fmt.Sprintf("Found %d differences:\n", len(dr.Diffs)))
+	sb.WriteString("Found ")
+	sb.WriteString(strconv.Itoa(len(dr.Diffs)))
+	sb.WriteString(" differences:\n")
 
 	for _, diff := range dr.Diffs {
 		switch d := diff.(type) {
@@ -26,25 +29,31 @@ func (dr *DiffResult) String() string {
 			sb.WriteString(": ")
 			switch d.ChangeType {
 			case ChangeTypeAdded:
-				sb.WriteString(fmt.Sprintf("%v", d.Right))
+				fmt.Fprint(&sb, d.Right)
 			case ChangeTypeRemoved:
-				sb.WriteString(fmt.Sprintf("%v", d.Left))
+				fmt.Fprint(&sb, d.Left)
 			default:
-				sb.WriteString(fmt.Sprintf("%v -> %v", d.Left, d.Right))
+				fmt.Fprint(&sb, d.Left)
+				sb.WriteString(" -> ")
+				fmt.Fprint(&sb, d.Right)
 			}
 			sb.WriteString("\n")
 		case *SliceDiff:
 			sb.WriteString(string(d.ChangeType))
 			sb.WriteString(" ")
 			sb.WriteString(d.Path)
-			sb.WriteString(fmt.Sprintf("[%d]: ", d.Index))
+			sb.WriteString("[")
+			sb.WriteString(strconv.Itoa(d.Index))
+			sb.WriteString("]: ")
 			switch d.ChangeType {
 			case ChangeTypeAdded:
-				sb.WriteString(fmt.Sprintf("%v", d.Right))
+				fmt.Fprint(&sb, d.Right)
 			case ChangeTypeRemoved:
-				sb.WriteString(fmt.Sprintf("%v", d.Left))
+				fmt.Fprint(&sb, d.Left)
 			default:
-				sb.WriteString(fmt.Sprintf("%v -> %v", d.Left, d.Right))
+				fmt.Fprint(&sb, d.Left)
+				sb.WriteString(" -> ")
+				fmt.Fprint(&sb, d.Right)
 			}
 			sb.WriteString("\n")
 		case *StructDiff:
@@ -52,18 +61,24 @@ func (dr *DiffResult) String() string {
 			if d.FieldName != "" {
 				sb.WriteString(" ")
 				if d.Path == d.FieldName {
-					sb.WriteString(fmt.Sprintf("%s: ", d.FieldName))
+					sb.WriteString(d.FieldName)
+					sb.WriteString(": ")
 				} else {
 					pathParts := strings.Split(d.Path, ".")
 					if len(pathParts) > 1 && pathParts[len(pathParts)-1] == d.FieldName {
 						parentPath := strings.Join(pathParts[:len(pathParts)-1], ".")
 						if parentPath == "" {
-							sb.WriteString(fmt.Sprintf("%s: ", d.FieldName))
+							sb.WriteString(d.FieldName)
+							sb.WriteString(": ")
 						} else {
-							sb.WriteString(fmt.Sprintf("%s.%s: ", parentPath, d.FieldName))
+							sb.WriteString(parentPath)
+							sb.WriteString(".")
+							sb.WriteString(d.FieldName)
+							sb.WriteString(": ")
 						}
 					} else {
-						sb.WriteString(fmt.Sprintf("%s: ", d.Path))
+						sb.WriteString(d.Path)
+						sb.WriteString(": ")
 					}
 				}
 			} else {
@@ -71,20 +86,22 @@ func (dr *DiffResult) String() string {
 			}
 			switch d.ChangeType {
 			case ChangeTypeAdded:
-				sb.WriteString(fmt.Sprintf("%v", d.Right))
+				fmt.Fprint(&sb, d.Right)
 			case ChangeTypeRemoved:
-				sb.WriteString(fmt.Sprintf("%v", d.Left))
+				fmt.Fprint(&sb, d.Left)
 			default:
-				sb.WriteString(fmt.Sprintf("%v -> %v", d.Left, d.Right))
+				fmt.Fprint(&sb, d.Left)
+				sb.WriteString(" -> ")
+				fmt.Fprint(&sb, d.Right)
 			}
 			sb.WriteString("\n")
 		case *Diff:
 			sb.WriteString("UPDATED ")
 			sb.WriteString(d.Path)
 			sb.WriteString(": ")
-			sb.WriteString(fmt.Sprintf("%v", d.Left))
+			fmt.Fprint(&sb, d.Left)
 			sb.WriteString(" -> ")
-			sb.WriteString(fmt.Sprintf("%v", d.Right))
+			fmt.Fprint(&sb, d.Right)
 			sb.WriteString("\n")
 		default:
 			sb.WriteString("? Unknown diff type\n")

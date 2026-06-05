@@ -302,14 +302,15 @@ func compareStructs(path string, leftVal, rightVal reflect.Value, result *DiffRe
 
 			if hasDiffTag(diffTag, "ignoreOrder") {
 				modifiedConfig = &CompareConfig{
-					IgnoreFields:      config.IgnoreFields,
-					IgnoreSliceOrder:  true,
-					CustomComparators: config.CustomComparators,
-					TypeHandlers:      config.TypeHandlers,
-					visitedPairs:      config.visitedPairs,
-					ignoreFieldsSet:   config.ignoreFieldsSet,
-					MaxDepth:          config.MaxDepth,
-					currentDepth:      config.currentDepth,
+					IgnoreFields:         config.IgnoreFields,
+					IgnoreSliceOrder:     true,
+					CompareNumericValues: config.CompareNumericValues,
+					CustomComparators:    config.CustomComparators,
+					TypeHandlers:         config.TypeHandlers,
+					visitedPairs:         config.visitedPairs,
+					ignoreFieldsSet:      config.ignoreFieldsSet,
+					MaxDepth:             config.MaxDepth,
+					currentDepth:         config.currentDepth,
 				}
 			}
 
@@ -368,7 +369,19 @@ func compareSlices(path string, leftVal, rightVal reflect.Value, result *DiffRes
 
 		if hasLeftElem && hasRightElem {
 			leftElemVal := reflect.ValueOf(leftElem)
-			if isBasicKind(leftElemVal.Kind()) && !reflect.DeepEqual(leftElem, rightElem) {
+			if leftElem == nil || rightElem == nil {
+				if !reflect.DeepEqual(leftElem, rightElem) {
+					result.Diffs = append(result.Diffs, &SliceDiff{
+						Diff: Diff{
+							Path:  path,
+							Left:  leftElem,
+							Right: rightElem,
+						},
+						Index:      i,
+						ChangeType: ChangeTypeUpdated,
+					})
+				}
+			} else if leftElemVal.IsValid() && isBasicKind(leftElemVal.Kind()) && !reflect.DeepEqual(leftElem, rightElem) {
 				result.Diffs = append(result.Diffs, &SliceDiff{
 					Diff: Diff{
 						Path:  path,
@@ -466,6 +479,10 @@ func compareSlicesByValue(path string, leftVal, rightVal reflect.Value, result *
 		return compareSlicesSimple(path, leftVal, rightVal, result)
 	}
 
+	if !sliceValuesAreHashSafe(leftVal) || !sliceValuesAreHashSafe(rightVal) {
+		return compareSlicesWithDeepEqual(path, leftVal, rightVal, result)
+	}
+
 	leftCounts := make(map[any]int, leftLen)
 	rightCounts := make(map[any]int, rightLen)
 
@@ -513,6 +530,54 @@ func compareSlicesByValue(path string, leftVal, rightVal reflect.Value, result *
 	}
 
 	return nil
+}
+
+func sliceValuesAreHashSafe(val reflect.Value) bool {
+	for i := range val.Len() {
+		if !valueIsHashSafe(val.Index(i)) {
+			return false
+		}
+	}
+	return true
+}
+
+func valueIsHashSafe(val reflect.Value) bool {
+	if !val.IsValid() {
+		return true
+	}
+
+	typ := val.Type()
+	if !typ.Comparable() {
+		return false
+	}
+
+	switch typ.Kind() {
+	case reflect.Interface:
+		if val.IsNil() {
+			return true
+		}
+		return valueIsHashSafe(val.Elem())
+	case reflect.Struct:
+		for i := range typ.NumField() {
+			fieldType := typ.Field(i).Type
+			if fieldType.Kind() == reflect.Interface {
+				if !val.Field(i).CanInterface() {
+					return false
+				}
+				if !valueIsHashSafe(val.Field(i)) {
+					return false
+				}
+			}
+		}
+	case reflect.Array:
+		for i := range val.Len() {
+			if !valueIsHashSafe(val.Index(i)) {
+				return false
+			}
+		}
+	}
+
+	return true
 }
 
 // compareSlicesUnordered provides unified comparison for slices ignoring order
@@ -702,6 +767,21 @@ func compareMaps(path string, leftVal, rightVal reflect.Value, result *DiffResul
 		leftValReflect := reflect.ValueOf(leftInterface)
 		rightValReflect := reflect.ValueOf(rightInterface)
 
+		if !leftValReflect.IsValid() || !rightValReflect.IsValid() {
+			if !reflect.DeepEqual(leftInterface, rightInterface) {
+				result.Diffs = append(result.Diffs, &MapDiff{
+					Diff: Diff{
+						Path:  elementPath,
+						Left:  leftInterface,
+						Right: rightInterface,
+					},
+					Key:        key.Interface(),
+					ChangeType: ChangeTypeUpdated,
+				})
+			}
+			continue
+		}
+
 		// Check for type mismatch with potential numeric comparison
 		if leftValReflect.Type() != rightValReflect.Type() {
 			if config.CompareNumericValues && isNumericKind(leftValReflect.Kind()) && isNumericKind(rightValReflect.Kind()) {
@@ -743,14 +823,9 @@ func compareMaps(path string, leftVal, rightVal reflect.Value, result *DiffResul
 				})
 			}
 		} else {
-			tempResult := &DiffResult{}
-			err := compareValues(elementPath, leftInterface, rightInterface, tempResult, config)
+			err := compareValues(elementPath, leftInterface, rightInterface, result, config)
 			if err != nil {
 				return err
-			}
-
-			if len(tempResult.Diffs) > 0 {
-				result.Diffs = append(result.Diffs, tempResult.Diffs...)
 			}
 		}
 	}

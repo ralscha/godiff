@@ -4,6 +4,10 @@
 
 Structural diff library for Go. Compares structs, slices, maps, and primitives recursively.
 
+## Requirements
+
+Go 1.26 or newer.
+
 ## Quick Start
 
 ```bash
@@ -79,7 +83,7 @@ result, err := godiff.Compare(left, right,
 | `WithCompareNumericValues()` | Compare numeric values across different types |
 | `WithMaxDepth(n)` | Limit recursion depth (0 = unlimited) |
 | `WithCustomComparators(map)` | Custom comparison functions for specific types |
-| `WithTypeHandlers(handlers)` | Custom handlers for complex types |
+| `WithTypeHandlers(handlers)` | Custom handlers for complex types; defaults handle `time.Time`, interfaces, functions, and channels |
 
 ### Struct Tags
 
@@ -96,7 +100,15 @@ type Product struct {
 See the demo application for more examples:
 
 ```bash
-go run cmd/demo/main.go
+go run ./cmd/demo
+```
+
+## Benchmarks
+
+Run the benchmark suite with allocation statistics:
+
+```bash
+go test ./... -bench . -benchmem -run ^$
 ```
 
 ## License
