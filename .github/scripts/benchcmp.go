@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -40,7 +41,7 @@ func parseFile(path string) (map[string]benchResult, error) {
 		return nil, err
 	}
 	defer f.Close()
-	results := make(map[string]benchResult)
+	samples := make(map[string][]benchResult)
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
@@ -60,15 +61,45 @@ func parseFile(path string) (map[string]benchResult, error) {
 		if m[5] != "" {
 			allocsVal, _ = strconv.ParseFloat(m[5], 64)
 		}
-		results[name] = benchResult{name: name, nsPerOp: ns, bytesPerOp: bytesVal, allocsPerOp: allocsVal}
+		samples[name] = append(samples[name], benchResult{name: name, nsPerOp: ns, bytesPerOp: bytesVal, allocsPerOp: allocsVal})
 	}
 	if err := scanner.Err(); err != nil {
 		return nil, err
 	}
-	if len(results) == 0 {
+	if len(samples) == 0 {
 		return nil, errors.New("no benchmarks parsed from " + path)
 	}
+
+	// A benchmark file commonly contains multiple runs (the workflow uses
+	// -count=5). Use their medians instead of whichever noisy sample happened
+	// to be printed last.
+	results := make(map[string]benchResult, len(samples))
+	for name, values := range samples {
+		nsPerOp := make([]float64, len(values))
+		bytesPerOp := make([]float64, len(values))
+		allocsPerOp := make([]float64, len(values))
+		for i, value := range values {
+			nsPerOp[i] = value.nsPerOp
+			bytesPerOp[i] = value.bytesPerOp
+			allocsPerOp[i] = value.allocsPerOp
+		}
+		results[name] = benchResult{
+			name:        name,
+			nsPerOp:     median(nsPerOp),
+			bytesPerOp:  median(bytesPerOp),
+			allocsPerOp: median(allocsPerOp),
+		}
+	}
 	return results, nil
+}
+
+func median(values []float64) float64 {
+	sort.Float64s(values)
+	middle := len(values) / 2
+	if len(values)%2 == 1 {
+		return values[middle]
+	}
+	return (values[middle-1] + values[middle]) / 2
 }
 
 func pctChange(base, current float64) float64 {

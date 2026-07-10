@@ -334,6 +334,26 @@ func TestIgnoreOrderSliceWithInterfaceNonComparableElements(t *testing.T) {
 	}
 }
 
+func TestIgnoreOrderSliceWithNestedInterfaceNonComparableElements(t *testing.T) {
+	type inner struct {
+		Value any
+	}
+	type outer struct {
+		Inner inner
+	}
+
+	left := []outer{{Inner: inner{Value: []int{1, 2}}}}
+	right := []outer{{Inner: inner{Value: []int{1, 2}}}}
+
+	result, err := Compare(left, right, WithIgnoreSliceOrder())
+	if err != nil {
+		t.Fatalf("Compare failed: %v", err)
+	}
+	if result.HasDifferences() {
+		t.Fatalf("Expected no differences, got: %s", result.String())
+	}
+}
+
 func TestCompareSlicesByValue2(t *testing.T) {
 	type SimpleStruct struct {
 		Name  string

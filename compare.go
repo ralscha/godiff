@@ -533,11 +533,35 @@ func compareSlicesByValue(path string, leftVal, rightVal reflect.Value, result *
 }
 
 func sliceValuesAreHashSafe(val reflect.Value) bool {
+	if typeIsStaticallyHashSafe(val.Type().Elem()) {
+		return true
+	}
 	for i := range val.Len() {
 		if !valueIsHashSafe(val.Index(i)) {
 			return false
 		}
 	}
+	return true
+}
+
+func typeIsStaticallyHashSafe(typ reflect.Type) bool {
+	if !typ.Comparable() {
+		return false
+	}
+
+	switch typ.Kind() {
+	case reflect.Interface:
+		return false
+	case reflect.Struct:
+		for i := range typ.NumField() {
+			if !typeIsStaticallyHashSafe(typ.Field(i).Type) {
+				return false
+			}
+		}
+	case reflect.Array:
+		return typeIsStaticallyHashSafe(typ.Elem())
+	}
+
 	return true
 }
 
@@ -559,14 +583,8 @@ func valueIsHashSafe(val reflect.Value) bool {
 		return valueIsHashSafe(val.Elem())
 	case reflect.Struct:
 		for i := range typ.NumField() {
-			fieldType := typ.Field(i).Type
-			if fieldType.Kind() == reflect.Interface {
-				if !val.Field(i).CanInterface() {
-					return false
-				}
-				if !valueIsHashSafe(val.Field(i)) {
-					return false
-				}
+			if !valueIsHashSafe(val.Field(i)) {
+				return false
 			}
 		}
 	case reflect.Array:
