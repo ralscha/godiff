@@ -553,8 +553,8 @@ func typeIsStaticallyHashSafe(typ reflect.Type) bool {
 	case reflect.Interface:
 		return false
 	case reflect.Struct:
-		for i := range typ.NumField() {
-			if !typeIsStaticallyHashSafe(typ.Field(i).Type) {
+		for field := range typ.Fields() {
+			if !typeIsStaticallyHashSafe(field.Type) {
 				return false
 			}
 		}
