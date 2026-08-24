@@ -329,11 +329,9 @@ func compareStructs(path string, leftVal, rightVal reflect.Value, result *DiffRe
 					}
 				} else {
 					result.Diffs = append(result.Diffs, &StructDiff{
-						Diff: Diff{
-							Path:  fieldPath,
-							Left:  leftFieldInterface,
-							Right: rightFieldInterface,
-						},
+						Path:       fieldPath,
+						Left:       leftFieldInterface,
+						Right:      rightFieldInterface,
 						FieldName:  field.Name,
 						ChangeType: ChangeTypeUpdated,
 					})
@@ -372,22 +370,18 @@ func compareSlices(path string, leftVal, rightVal reflect.Value, result *DiffRes
 			if leftElem == nil || rightElem == nil {
 				if !reflect.DeepEqual(leftElem, rightElem) {
 					result.Diffs = append(result.Diffs, &SliceDiff{
-						Diff: Diff{
-							Path:  path,
-							Left:  leftElem,
-							Right: rightElem,
-						},
+						Path:       path,
+						Left:       leftElem,
+						Right:      rightElem,
 						Index:      i,
 						ChangeType: ChangeTypeUpdated,
 					})
 				}
 			} else if leftElemVal.IsValid() && isBasicKind(leftElemVal.Kind()) && !reflect.DeepEqual(leftElem, rightElem) {
 				result.Diffs = append(result.Diffs, &SliceDiff{
-					Diff: Diff{
-						Path:  path,
-						Left:  leftElem,
-						Right: rightElem,
-					},
+					Path:       path,
+					Left:       leftElem,
+					Right:      rightElem,
 					Index:      i,
 					ChangeType: ChangeTypeUpdated,
 				})
@@ -401,22 +395,18 @@ func compareSlices(path string, leftVal, rightVal reflect.Value, result *DiffRes
 		} else if hasLeftElem {
 			// removed
 			result.Diffs = append(result.Diffs, &SliceDiff{
-				Diff: Diff{
-					Path:  path,
-					Left:  leftElem,
-					Right: nil,
-				},
+				Path:       path,
+				Left:       leftElem,
+				Right:      nil,
 				Index:      i,
 				ChangeType: ChangeTypeRemoved,
 			})
 		} else if hasRightElem {
 			// added
 			result.Diffs = append(result.Diffs, &SliceDiff{
-				Diff: Diff{
-					Path:  path,
-					Left:  nil,
-					Right: rightElem,
-				},
+				Path:       path,
+				Left:       nil,
+				Right:      rightElem,
 				Index:      i,
 				ChangeType: ChangeTypeAdded,
 			})
@@ -768,11 +758,9 @@ func compareMaps(path string, leftVal, rightVal reflect.Value, result *DiffResul
 		if !rightMapVal.IsValid() {
 			// Key removed
 			result.Diffs = append(result.Diffs, &MapDiff{
-				Diff: Diff{
-					Path:  elementPath,
-					Left:  leftMapVal.Interface(),
-					Right: nil,
-				},
+				Path:       elementPath,
+				Left:       leftMapVal.Interface(),
+				Right:      nil,
 				Key:        key.Interface(),
 				ChangeType: ChangeTypeRemoved,
 			})
@@ -788,11 +776,9 @@ func compareMaps(path string, leftVal, rightVal reflect.Value, result *DiffResul
 		if !leftValReflect.IsValid() || !rightValReflect.IsValid() {
 			if !reflect.DeepEqual(leftInterface, rightInterface) {
 				result.Diffs = append(result.Diffs, &MapDiff{
-					Diff: Diff{
-						Path:  elementPath,
-						Left:  leftInterface,
-						Right: rightInterface,
-					},
+					Path:       elementPath,
+					Left:       leftInterface,
+					Right:      rightInterface,
 					Key:        key.Interface(),
 					ChangeType: ChangeTypeUpdated,
 				})
@@ -805,22 +791,18 @@ func compareMaps(path string, leftVal, rightVal reflect.Value, result *DiffResul
 			if config.CompareNumericValues && isNumericKind(leftValReflect.Kind()) && isNumericKind(rightValReflect.Kind()) {
 				if !numericValuesEqual(leftValReflect, rightValReflect) {
 					result.Diffs = append(result.Diffs, &MapDiff{
-						Diff: Diff{
-							Path:  elementPath,
-							Left:  leftInterface,
-							Right: rightInterface,
-						},
+						Path:       elementPath,
+						Left:       leftInterface,
+						Right:      rightInterface,
 						Key:        key.Interface(),
 						ChangeType: ChangeTypeUpdated,
 					})
 				}
 			} else {
 				result.Diffs = append(result.Diffs, &MapDiff{
-					Diff: Diff{
-						Path:  elementPath,
-						Left:  leftInterface,
-						Right: rightInterface,
-					},
+					Path:       elementPath,
+					Left:       leftInterface,
+					Right:      rightInterface,
 					Key:        key.Interface(),
 					ChangeType: ChangeTypeUpdated,
 				})
@@ -831,11 +813,9 @@ func compareMaps(path string, leftVal, rightVal reflect.Value, result *DiffResul
 		if isBasicKind(leftValReflect.Kind()) {
 			if !reflect.DeepEqual(leftInterface, rightInterface) {
 				result.Diffs = append(result.Diffs, &MapDiff{
-					Diff: Diff{
-						Path:  elementPath,
-						Left:  leftInterface,
-						Right: rightInterface,
-					},
+					Path:       elementPath,
+					Left:       leftInterface,
+					Right:      rightInterface,
 					Key:        key.Interface(),
 					ChangeType: ChangeTypeUpdated,
 				})
@@ -855,11 +835,9 @@ func compareMaps(path string, leftVal, rightVal reflect.Value, result *DiffResul
 			elementPath := path + "[" + keyStr + "]"
 
 			result.Diffs = append(result.Diffs, &MapDiff{
-				Diff: Diff{
-					Path:  elementPath,
-					Left:  nil,
-					Right: rightVal.MapIndex(key).Interface(),
-				},
+				Path:       elementPath,
+				Left:       nil,
+				Right:      rightVal.MapIndex(key).Interface(),
 				Key:        key.Interface(),
 				ChangeType: ChangeTypeAdded,
 			})

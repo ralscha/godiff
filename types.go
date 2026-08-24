@@ -54,7 +54,7 @@ func (dr *DiffResult) AddDiff(path string, left, right any) {
 // AddStructDiff adds a StructDiff to the result
 func (dr *DiffResult) AddStructDiff(path, fieldName string, left, right any, changeType ChangeType) {
 	dr.Diffs = append(dr.Diffs, &StructDiff{
-		Diff:       Diff{Path: path, Left: left, Right: right},
+		Path: path, Left: left, Right: right,
 		FieldName:  fieldName,
 		ChangeType: changeType,
 	})
@@ -63,7 +63,7 @@ func (dr *DiffResult) AddStructDiff(path, fieldName string, left, right any, cha
 // AddSliceDiff adds a SliceDiff to the result
 func (dr *DiffResult) AddSliceDiff(path string, index int, left, right any, changeType ChangeType) {
 	dr.Diffs = append(dr.Diffs, &SliceDiff{
-		Diff:       Diff{Path: path, Left: left, Right: right},
+		Path: path, Left: left, Right: right,
 		Index:      index,
 		ChangeType: changeType,
 	})
@@ -72,7 +72,7 @@ func (dr *DiffResult) AddSliceDiff(path string, index int, left, right any, chan
 // AddMapDiff adds a MapDiff to the result
 func (dr *DiffResult) AddMapDiff(path string, key, left, right any, changeType ChangeType) {
 	dr.Diffs = append(dr.Diffs, &MapDiff{
-		Diff:       Diff{Path: path, Left: left, Right: right},
+		Path: path, Left: left, Right: right,
 		Key:        key,
 		ChangeType: changeType,
 	})

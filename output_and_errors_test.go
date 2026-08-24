@@ -516,11 +516,9 @@ func TestStringOutputAdditionalEdgeCases(t *testing.T) {
 		result := &DiffResult{
 			Diffs: []any{
 				&StructDiff{
-					Diff: Diff{
-						Path:  "test",
-						Left:  "left",
-						Right: "right",
-					},
+					Path:       "test",
+					Left:       "left",
+					Right:      "right",
 					FieldName:  "",
 					ChangeType: ChangeTypeUpdated,
 				},
@@ -536,11 +534,9 @@ func TestStringOutputAdditionalEdgeCases(t *testing.T) {
 		result := &DiffResult{
 			Diffs: []any{
 				&MapDiff{
-					Diff: Diff{
-						Path:  "test",
-						Left:  "left",
-						Right: "right",
-					},
+					Path:       "test",
+					Left:       "left",
+					Right:      "right",
 					Key:        map[string]int{"complex": 1},
 					ChangeType: ChangeTypeUpdated,
 				},
