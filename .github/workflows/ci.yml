@@ -23,7 +23,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v7
         with:
-          go-version: '1.26'
+          go-version-file: 'go.mod'
           check-latest: true
 
       - name: Cache Go build
@@ -66,13 +66,13 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v7
         with:
-          go-version: '1.26'
+          go-version-file: 'go.mod'
           check-latest: true
 
       - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v8
+        uses: golangci/golangci-lint-action@v9
         with:
-          version: v2.9.0
+          version: v2.13.1
 
   fuzz:
     name: Fuzz (short)
@@ -82,7 +82,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
-          go-version: '1.26'
+          go-version-file: 'go.mod'
           check-latest: true
       - name: Run fuzz tests (5s budget per function)
         run: |
@@ -118,7 +118,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v7
         with:
-          go-version: '1.26'
+          go-version-file: 'go.mod'
           check-latest: true
       - name: Determine last tag
         id: lasttag
