@@ -1,10 +1,16 @@
 package godiff
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 	"strconv"
 	"strings"
+)
+
+var (
+	_ json.Marshaler   = (*DiffResult)(nil)
+	_ json.MarshalerTo = (*DiffResult)(nil)
 )
 
 // String returns a human-readable representation of the diff result
@@ -127,10 +133,10 @@ func (dr *DiffResult) Count() int {
 type jsonChange struct {
 	Type      string  `json:"type"`
 	Path      string  `json:"path"`
-	Left      any     `json:"leftValue,omitempty"`
-	Right     any     `json:"rightValue,omitempty"`
-	Key       *string `json:"key,omitempty"`
-	Index     *int    `json:"index,omitempty"`
+	Left      any     `json:"leftValue,omitzero"`
+	Right     any     `json:"rightValue,omitzero"`
+	Key       *string `json:"key,omitzero"`
+	Index     *int    `json:"index,omitzero"`
 	FieldName string  `json:"fieldName,omitempty"`
 	Change    string  `json:"change"`
 }
@@ -138,7 +144,13 @@ type jsonChange struct {
 // MarshalJSON implements json.Marshaler using the same change-oriented schema
 // as ToJSON. In particular, slice index zero and empty map keys are retained.
 func (dr *DiffResult) MarshalJSON() ([]byte, error) {
-	return json.Marshal(dr.jsonChanges())
+	return json.Marshal(dr.jsonChanges(), json.Deterministic(true))
+}
+
+// MarshalJSONTo implements json.MarshalerTo without allocating an intermediate
+// JSON buffer. MarshalEncode preserves any options configured by the caller.
+func (dr *DiffResult) MarshalJSONTo(out *jsontext.Encoder) error {
+	return json.MarshalEncode(out, dr.jsonChanges())
 }
 
 func (dr *DiffResult) jsonChanges() []jsonChange {
@@ -208,9 +220,17 @@ func (dr *DiffResult) ToJSON() string {
 		return `[]`
 	}
 
-	jsonBytes, err := json.MarshalIndent(dr, "", "  ")
+	jsonBytes, err := json.Marshal(
+		dr,
+		json.Deterministic(true),
+		jsontext.Multiline(true),
+		jsontext.WithIndent("  "),
+	)
 	if err != nil {
-		errorJSON, _ := json.Marshal([]map[string]string{{"error": "Failed to marshal JSON: " + err.Error()}})
+		errorJSON, _ := json.Marshal(
+			[]map[string]string{{"error": "Failed to marshal JSON: " + err.Error()}},
+			json.Deterministic(true),
+		)
 		return string(errorJSON)
 	}
 

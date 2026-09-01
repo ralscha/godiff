@@ -110,8 +110,9 @@ go run ./cmd/demo
 
 ## JSON
 
-`result.ToJSON()` returns the formatted change array shown above. `DiffResult`
-also implements `json.Marshaler`, so it can be embedded directly in another JSON
+`result.ToJSON()` returns the formatted change array shown above using
+`encoding/json/v2`. `DiffResult` implements both `json.Marshaler` and the more
+efficient `json.MarshalerTo`, so it can be embedded directly in another JSON
 document with `json.Marshal(result)`.
 
 ## Benchmarks

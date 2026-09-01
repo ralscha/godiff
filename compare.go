@@ -75,10 +75,6 @@ func Compare(left, right any, opts ...CompareOption) (*DiffResult, error) {
 		}
 	}
 
-	if config.visitedPairs == nil {
-		config.visitedPairs = make(map[visit]bool)
-	}
-
 	if config.ignoreFieldsSet == nil && len(config.IgnoreFields) > 0 {
 		config.ignoreFieldsSet = make(map[string]bool, len(config.IgnoreFields))
 		for _, field := range config.IgnoreFields {
@@ -220,11 +216,13 @@ func compareValues(path string, left, right any, result *DiffResult, config *Com
 	leftKind := leftVal.Kind()
 	if leftKind == reflect.Map || leftKind == reflect.Pointer || leftKind == reflect.Slice {
 		if pair, ok := referenceVisit(leftVal, rightVal); ok {
-			if config.visitedPairs[pair] {
+			if config.visitedPairs == nil {
+				config.visitedPairs = &visitTracker{}
+			}
+			if !config.visitedPairs.enter(pair) {
 				return nil
 			}
-			config.visitedPairs[pair] = true
-			defer delete(config.visitedPairs, pair)
+			defer config.visitedPairs.leave(pair)
 		}
 	}
 

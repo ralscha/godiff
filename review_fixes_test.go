@@ -1,7 +1,7 @@
 package godiff
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"math"
 	"reflect"
 	"strings"
@@ -63,6 +63,34 @@ func TestReferenceCyclesInMapsAndSlices(t *testing.T) {
 			t.Fatalf("unexpected diff: %#v", result.Diffs[0])
 		}
 	})
+}
+
+func TestDeepReferenceCycle(t *testing.T) {
+	type node struct {
+		Value int
+		Next  *node
+	}
+
+	left := &node{Value: 1}
+	left.Next = &node{Value: 2}
+	left.Next.Next = &node{Value: 3}
+	left.Next.Next.Next = left
+
+	right := &node{Value: 1}
+	right.Next = &node{Value: 20}
+	right.Next.Next = &node{Value: 3}
+	right.Next.Next.Next = right
+
+	result, err := Compare(left, right)
+	if err != nil {
+		t.Fatalf("Compare failed: %v", err)
+	}
+	if result.Count() != 1 {
+		t.Fatalf("expected the non-cyclic difference, got %s", result)
+	}
+	if diff, ok := result.Diffs[0].(*StructDiff); !ok || diff.Path != "Next.Value" {
+		t.Fatalf("unexpected diff: %#v", result.Diffs[0])
+	}
 }
 
 func TestMapWithNonReflexiveKeyDoesNotPanic(t *testing.T) {
@@ -245,7 +273,8 @@ func TestJSONRetainsZeroIndexAndSupportsMarshalJSON(t *testing.T) {
 
 	for name, data := range map[string][]byte{
 		"ToJSON":      []byte(result.ToJSON()),
-		"MarshalJSON": mustMarshalJSON(t, result),
+		"MarshalJSON": mustCallMarshalJSON(t, result),
+		"MarshalerTo": mustMarshalJSON(t, result),
 	} {
 		t.Run(name, func(t *testing.T) {
 			var changes []map[string]any
@@ -273,6 +302,43 @@ func TestJSONRetainsEmptyMapKey(t *testing.T) {
 	if !exists || key != "" {
 		t.Fatalf("empty map key was omitted: %s", result.ToJSON())
 	}
+}
+
+func TestJSONRetainsNonNilEmptyValues(t *testing.T) {
+	result := &DiffResult{Diffs: []any{
+		&Diff{Path: "value", Left: "", Right: []int{}},
+	}}
+
+	var changes []map[string]any
+	if err := json.Unmarshal([]byte(result.ToJSON()), &changes); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if left, exists := changes[0]["leftValue"]; !exists || left != "" {
+		t.Fatalf("empty string was omitted: %s", result.ToJSON())
+	}
+	if right, exists := changes[0]["rightValue"]; !exists {
+		t.Fatalf("empty slice was omitted: %s", result.ToJSON())
+	} else if values, ok := right.([]any); !ok || len(values) != 0 {
+		t.Fatalf("empty slice changed shape: %#v", right)
+	}
+}
+
+func TestJSONV2RejectsInvalidUTF8(t *testing.T) {
+	result := &DiffResult{Diffs: []any{
+		&Diff{Path: "value", Left: string([]byte{0xff}), Right: "valid"},
+	}}
+	if _, err := json.Marshal(result); err == nil {
+		t.Fatal("encoding/json/v2 should reject invalid UTF-8")
+	}
+}
+
+func mustCallMarshalJSON(t *testing.T, result *DiffResult) []byte {
+	t.Helper()
+	data, err := result.MarshalJSON()
+	if err != nil {
+		t.Fatalf("MarshalJSON failed: %v", err)
+	}
+	return data
 }
 
 func mustMarshalJSON(t *testing.T, value any) []byte {

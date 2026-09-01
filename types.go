@@ -55,6 +55,55 @@ type visit struct {
 	leftLen, rightLen int
 }
 
+// visitTracker keeps the common shallow case inline. A map is only needed for
+// unusually deep reference graphs, avoiding a large map bucket on every
+// comparison that happens to contain a pointer, map, or slice.
+type visitTracker struct {
+	inline [2]visit
+	count  int
+	deep   map[visit]struct{}
+}
+
+func (vt *visitTracker) enter(pair visit) bool {
+	if vt.deep != nil {
+		if _, seen := vt.deep[pair]; seen {
+			return false
+		}
+		vt.deep[pair] = struct{}{}
+		return true
+	}
+
+	for i := range vt.count {
+		if vt.inline[i] == pair {
+			return false
+		}
+	}
+	if vt.count < len(vt.inline) {
+		vt.inline[vt.count] = pair
+		vt.count++
+		return true
+	}
+
+	vt.deep = make(map[visit]struct{}, len(vt.inline)+1)
+	for _, active := range vt.inline {
+		vt.deep[active] = struct{}{}
+	}
+	vt.deep[pair] = struct{}{}
+	return true
+}
+
+func (vt *visitTracker) leave(pair visit) {
+	if vt.deep != nil {
+		delete(vt.deep, pair)
+		return
+	}
+
+	// Visits are entered and left by nested compareValues calls, so the active
+	// inline entries form a stack.
+	vt.count--
+	vt.inline[vt.count] = visit{}
+}
+
 // AddDiff adds a basic Diff to the result
 func (dr *DiffResult) AddDiff(path string, left, right any) {
 	dr.Diffs = append(dr.Diffs, &Diff{Path: path, Left: left, Right: right})
@@ -107,8 +156,8 @@ type CompareConfig struct {
 	TypeHandlers []TypeHandler
 	// MaxDepth limits the recursion depth for comparison. 0 means unlimited.
 	MaxDepth int
-	// visitedPairs tracks reference pairs for cycle detection (internal use only).
-	visitedPairs map[visit]bool
+	// visitedPairs tracks active reference pairs for cycle detection (internal use only).
+	visitedPairs *visitTracker
 	// ignoreFieldsSet is a pre-computed set for O(1) lookup (internal use only)
 	ignoreFieldsSet map[string]bool
 	// currentDepth tracks the current recursion depth (internal use only)
@@ -127,6 +176,5 @@ func DefaultCompareConfig() *CompareConfig {
 		IgnoreFields:     []string{},
 		IgnoreSliceOrder: false,
 		TypeHandlers:     DefaultTypeHandlers(),
-		visitedPairs:     make(map[visit]bool),
 	}
 }
