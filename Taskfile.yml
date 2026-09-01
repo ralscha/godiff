@@ -41,7 +41,12 @@ tasks:
     cmds:
       - task fuzz:strings
       - task fuzz:ints
+      - task fuzz:slices
       - task fuzz:structs
+      - task fuzz:maps
+      - task fuzz:nils
+      - task fuzz:options
+      - task fuzz:time
 
   fuzz:strings:
     desc: Run string comparison fuzz tests
@@ -53,10 +58,35 @@ tasks:
     cmds:
       - go test -fuzz=FuzzCompareInts -fuzztime={{.FUZZ_TIME}} .
 
+  fuzz:slices:
+    desc: Run slice comparison fuzz tests
+    cmds:
+      - go test -fuzz=FuzzCompareSlices -fuzztime={{.FUZZ_TIME}} .
+
   fuzz:structs:
     desc: Run struct comparison fuzz tests
     cmds:
       - go test -fuzz=FuzzCompareStructs -fuzztime={{.FUZZ_TIME}} .
+
+  fuzz:maps:
+    desc: Run map comparison fuzz tests
+    cmds:
+      - go test -fuzz=FuzzCompareMaps -fuzztime={{.FUZZ_TIME}} .
+
+  fuzz:nils:
+    desc: Run nil comparison fuzz tests
+    cmds:
+      - go test -fuzz=FuzzCompareWithNils -fuzztime={{.FUZZ_TIME}} .
+
+  fuzz:options:
+    desc: Run configured comparison fuzz tests
+    cmds:
+      - go test -fuzz=FuzzCompareWithOptions -fuzztime={{.FUZZ_TIME}} .
+
+  fuzz:time:
+    desc: Run time comparison fuzz tests
+    cmds:
+      - go test -fuzz=FuzzCompareTime -fuzztime={{.FUZZ_TIME}} .
 
   benchmark:
     desc: Run benchmarks with memory allocation stats

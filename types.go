@@ -46,6 +46,15 @@ type DiffResult struct {
 	Diffs []any // Can hold Diff, MapDiff, SliceDiff, or StructDiff
 }
 
+// visit identifies a pair of reference values currently being compared.
+// Slice lengths are part of the identity because two slices can share a
+// backing array while exposing different values.
+type visit struct {
+	typ               reflect.Type
+	left, right       uintptr
+	leftLen, rightLen int
+}
+
 // AddDiff adds a basic Diff to the result
 func (dr *DiffResult) AddDiff(path string, left, right any) {
 	dr.Diffs = append(dr.Diffs, &Diff{Path: path, Left: left, Right: right})
@@ -88,16 +97,18 @@ type CompareConfig struct {
 	IgnoreSliceOrder bool
 	// CompareNumericValues, if true, compares numeric values across different types.
 	// For example, int(1) and int64(1) would be considered equal.
-	// This applies to all integer and floating-point types.
+	// This applies to integer, floating-point, and complex types.
 	CompareNumericValues bool
+	// hasCustomTypeHandlers avoids repeatedly scanning the handler list on hot paths.
+	hasCustomTypeHandlers bool
 	// CustomComparators is a map of custom comparison functions for specific types.
 	CustomComparators map[reflect.Type]func(left, right any, config *CompareConfig) (bool, error)
 	// TypeHandlers is a list of handlers for comparing custom or complex types.
 	TypeHandlers []TypeHandler
 	// MaxDepth limits the recursion depth for comparison. 0 means unlimited.
 	MaxDepth int
-	// visitedPairs tracks visited pointer pairs for cycle detection (internal use only)
-	visitedPairs map[[2]uintptr]bool
+	// visitedPairs tracks reference pairs for cycle detection (internal use only).
+	visitedPairs map[visit]bool
 	// ignoreFieldsSet is a pre-computed set for O(1) lookup (internal use only)
 	ignoreFieldsSet map[string]bool
 	// currentDepth tracks the current recursion depth (internal use only)
@@ -116,6 +127,6 @@ func DefaultCompareConfig() *CompareConfig {
 		IgnoreFields:     []string{},
 		IgnoreSliceOrder: false,
 		TypeHandlers:     DefaultTypeHandlers(),
-		visitedPairs:     make(map[[2]uintptr]bool),
+		visitedPairs:     make(map[visit]bool),
 	}
 }

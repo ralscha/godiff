@@ -6,7 +6,7 @@ Structural diff library for Go. Compares structs, slices, maps, and primitives r
 
 ## Requirements
 
-Go 1.26 or newer.
+Go 1.27 or newer.
 
 ## Quick Start
 
@@ -83,7 +83,12 @@ result, err := godiff.Compare(left, right,
 | `WithCompareNumericValues()` | Compare numeric values across different types |
 | `WithMaxDepth(n)` | Limit recursion depth (0 = unlimited) |
 | `WithCustomComparators(map)` | Custom comparison functions for specific types |
-| `WithTypeHandlers(handlers)` | Custom handlers for complex types; defaults handle `time.Time`, interfaces, functions, and channels |
+| `WithTypeHandlers(handlers)` | Replace all type handlers; defaults handle `time.Time`, interfaces, functions, and channels |
+| `WithAdditionalTypeHandlers(handlers...)` | Add higher-priority handlers while retaining the defaults |
+
+Options apply recursively, including inside structs, maps, ordered slices, and
+unordered slices. Numeric comparison is exact: large integers are not treated as
+equal to rounded floating-point values.
 
 ### Struct Tags
 
@@ -102,6 +107,12 @@ See the demo application for more examples:
 ```bash
 go run ./cmd/demo
 ```
+
+## JSON
+
+`result.ToJSON()` returns the formatted change array shown above. `DiffResult`
+also implements `json.Marshaler`, so it can be embedded directly in another JSON
+document with `json.Marshal(result)`.
 
 ## Benchmarks
 

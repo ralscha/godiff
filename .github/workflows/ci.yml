@@ -39,6 +39,9 @@ jobs:
         run: |
           go test $(go list ./... | grep -v './cmd/demo') -coverprofile=coverage.out -covermode=atomic -race -count=1
 
+      - name: Test benchmark tooling
+        run: go test -race -count=1 ./.github/scripts
+
       - name: Check coverage threshold
         env:
           COVERAGE_THRESHOLD: 80.0
@@ -86,25 +89,29 @@ jobs:
           check-latest: true
       - name: Run fuzz tests (5s budget per function)
         run: |
-          # Run specific fuzz targets as defined in Taskfile.yml
-          # Note: Fuzzing may hit "context deadline exceeded" in CI, which is often normal
-          echo "Running FuzzCompareStrings..."
-          go test -fuzz=FuzzCompareStrings -fuzztime=5s . && echo "✓ FuzzCompareStrings completed" || echo "⚠ FuzzCompareStrings hit timeout (normal in CI)"
-          
-          echo "Running FuzzCompareInts..."  
-          go test -fuzz=FuzzCompareInts -fuzztime=5s . && echo "✓ FuzzCompareInts completed" || echo "⚠ FuzzCompareInts hit timeout (normal in CI)"
-          
-          echo "Running FuzzCompareStructs..."
-          go test -fuzz=FuzzCompareStructs -fuzztime=5s . && echo "✓ FuzzCompareStructs completed" || echo "⚠ FuzzCompareStructs hit timeout (normal in CI)"
-          
-          echo "Fuzz testing completed (timeouts are normal in CI environments)"
+          for target in \
+            FuzzCompareStrings \
+            FuzzCompareInts \
+            FuzzCompareSlices \
+            FuzzCompareStructs \
+            FuzzCompareMaps \
+            FuzzCompareWithNils \
+            FuzzCompareWithOptions \
+            FuzzCompareTime
+          do
+            echo "Running ${target}..."
+            go test -run=^$ -fuzz="^${target}$" -fuzztime=5s .
+          done
+      - name: Resolve fuzz cache path
+        id: fuzz-cache
+        if: always()
+        run: echo "path=$(go env GOCACHE)/fuzz" >> "$GITHUB_OUTPUT"
       - name: Upload fuzz cache corpus
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: fuzz-corpus
-          path: | 
-            $(go env GOCACHE)/fuzz
+          path: ${{ steps.fuzz-cache.outputs.path }}
           if-no-files-found: ignore
 
   benchmark:

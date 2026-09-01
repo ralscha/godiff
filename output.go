@@ -9,7 +9,7 @@ import (
 
 // String returns a human-readable representation of the diff result
 func (dr *DiffResult) String() string {
-	if len(dr.Diffs) == 0 {
+	if dr == nil || len(dr.Diffs) == 0 {
 		return "No differences found"
 	}
 
@@ -113,52 +113,65 @@ func (dr *DiffResult) String() string {
 
 // HasDifferences returns true if there are any differences
 func (dr *DiffResult) HasDifferences() bool {
-	return len(dr.Diffs) > 0
+	return dr != nil && len(dr.Diffs) > 0
 }
 
 // Count returns the number of differences
 func (dr *DiffResult) Count() int {
+	if dr == nil {
+		return 0
+	}
 	return len(dr.Diffs)
 }
 
-// ToJSON returns a JSON representation of the diff result
-func (dr *DiffResult) ToJSON() string {
-	if len(dr.Diffs) == 0 {
-		return `[]`
-	}
+type jsonChange struct {
+	Type      string  `json:"type"`
+	Path      string  `json:"path"`
+	Left      any     `json:"leftValue,omitempty"`
+	Right     any     `json:"rightValue,omitempty"`
+	Key       *string `json:"key,omitempty"`
+	Index     *int    `json:"index,omitempty"`
+	FieldName string  `json:"fieldName,omitempty"`
+	Change    string  `json:"change"`
+}
 
-	type jsonChange struct {
-		Type      string `json:"type"`
-		Path      string `json:"path"`
-		Left      any    `json:"leftValue,omitempty"`
-		Right     any    `json:"rightValue,omitempty"`
-		Key       string `json:"key,omitempty"`
-		Index     int    `json:"index,omitempty"`
-		FieldName string `json:"fieldName,omitempty"`
-		Change    string `json:"change"`
-	}
+// MarshalJSON implements json.Marshaler using the same change-oriented schema
+// as ToJSON. In particular, slice index zero and empty map keys are retained.
+func (dr *DiffResult) MarshalJSON() ([]byte, error) {
+	return json.Marshal(dr.jsonChanges())
+}
 
-	changes := make([]jsonChange, 0, len(dr.Diffs))
+func (dr *DiffResult) jsonChanges() []jsonChange {
+	count := 0
+	if dr != nil {
+		count = len(dr.Diffs)
+	}
+	changes := make([]jsonChange, 0, count)
+	if dr == nil {
+		return changes
+	}
 
 	for _, diff := range dr.Diffs {
 		var jc jsonChange
 		switch d := diff.(type) {
 		case *MapDiff:
+			key := fmt.Sprintf("%v", d.Key)
 			jc = jsonChange{
 				Type:   "map",
 				Path:   d.Path,
 				Left:   d.Left,
 				Right:  d.Right,
-				Key:    fmt.Sprintf("%v", d.Key),
+				Key:    &key,
 				Change: string(d.ChangeType),
 			}
 		case *SliceDiff:
+			index := d.Index
 			jc = jsonChange{
 				Type:   "slice",
 				Path:   d.Path,
 				Left:   d.Left,
 				Right:  d.Right,
-				Index:  d.Index,
+				Index:  &index,
 				Change: string(d.ChangeType),
 			}
 		case *StructDiff:
@@ -182,20 +195,23 @@ func (dr *DiffResult) ToJSON() string {
 		case *Diff:
 			jc = jsonChange{Type: "value", Path: d.Path, Left: d.Left, Right: d.Right, Change: "UPDATED"}
 		default:
-			jc = jsonChange{
-				Type:   "unknown",
-				Path:   "unknown",
-				Left:   nil,
-				Right:  nil,
-				Change: "UNKNOWN",
-			}
+			jc = jsonChange{Type: "unknown", Path: "unknown", Change: "UNKNOWN"}
 		}
 		changes = append(changes, jc)
 	}
+	return changes
+}
 
-	jsonBytes, err := json.MarshalIndent(changes, "", "  ")
+// ToJSON returns a JSON representation of the diff result
+func (dr *DiffResult) ToJSON() string {
+	if dr == nil || len(dr.Diffs) == 0 {
+		return `[]`
+	}
+
+	jsonBytes, err := json.MarshalIndent(dr, "", "  ")
 	if err != nil {
-		return fmt.Sprintf(`[{"error": "Failed to marshal JSON: %s"}]`, err.Error())
+		errorJSON, _ := json.Marshal([]map[string]string{{"error": "Failed to marshal JSON: " + err.Error()}})
+		return string(errorJSON)
 	}
 
 	return string(jsonBytes)
