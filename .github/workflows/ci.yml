@@ -52,7 +52,7 @@ jobs:
           go tool cover -html=coverage.out -o coverage.html
 
       - name: Upload coverage artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: coverage
           path: |
@@ -108,7 +108,7 @@ jobs:
         run: echo "path=$(go env GOCACHE)/fuzz" >> "$GITHUB_OUTPUT"
       - name: Upload fuzz cache corpus
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: fuzz-corpus
           path: ${{ steps.fuzz-cache.outputs.path }}
@@ -154,7 +154,7 @@ jobs:
           go run .github/scripts/benchcmp.go -base benchmark_base.txt -current benchmark_current.txt -time $TIME_THRESHOLD -bytes $BYTES_THRESHOLD -allocs $ALLOCS_THRESHOLD
       - name: Upload benchmark artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: benchmarks
           path: |
