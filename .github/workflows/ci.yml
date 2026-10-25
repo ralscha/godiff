@@ -176,7 +176,7 @@ jobs:
             name: benchmarks
             path: .
       - name: Upload benchmark to release assets
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: benchmark_current.txt
           body: "Automated benchmark results for ${{ github.ref_name }}"
