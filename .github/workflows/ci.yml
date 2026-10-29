@@ -92,6 +92,7 @@ jobs:
           for target in \
             FuzzCompareStrings \
             FuzzCompareInts \
+            FuzzCompareIntegerFloat \
             FuzzCompareSlices \
             FuzzCompareStructs \
             FuzzCompareMaps \

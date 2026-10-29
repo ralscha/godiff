@@ -2,7 +2,7 @@ package godiff
 
 import (
 	"fmt"
-	"math/big"
+	"math"
 	"reflect"
 	"slices"
 	"strconv"
@@ -198,16 +198,18 @@ func compareValues(path string, left, right any, result *DiffResult, config *Com
 		}
 	}
 
-	// Early exit for references that expose exactly the same value. This comes
-	// after configured comparators and handlers so they remain authoritative.
-	// Slice length matters because slices can share a backing array while
-	// exposing different values.
+	// Shared containers still need traversal when a nested comparator or handler
+	// may report a difference. Slice length matters for shared backing arrays.
 	switch leftVal.Kind() {
 	case reflect.Slice:
-		if leftVal.Pointer() == rightVal.Pointer() && leftVal.Len() == rightVal.Len() {
+		if canSkipDeepEqualValues(config) && leftVal.Pointer() == rightVal.Pointer() && leftVal.Len() == rightVal.Len() {
 			return nil
 		}
-	case reflect.Pointer, reflect.Map, reflect.Chan, reflect.Func:
+	case reflect.Pointer, reflect.Map:
+		if canSkipDeepEqualValues(config) && leftVal.Pointer() == rightVal.Pointer() {
+			return nil
+		}
+	case reflect.Chan, reflect.Func:
 		if leftVal.Pointer() == rightVal.Pointer() {
 			return nil
 		}
@@ -304,6 +306,11 @@ func canCompareDirectly(left, right any, config *CompareConfig) bool {
 
 	leftType := leftValue.Type()
 	if leftType != rightValue.Type() {
+		// compareValues treats typed nil pointers as equal across pointer types.
+		if leftValue.Kind() == reflect.Pointer && rightValue.Kind() == reflect.Pointer &&
+			leftValue.IsNil() && rightValue.IsNil() {
+			return false
+		}
 		return !config.CompareNumericValues ||
 			!isNumericKind(leftValue.Kind()) || !isNumericKind(rightValue.Kind())
 	}
@@ -333,7 +340,7 @@ func canCompareTypeDirectly(typ reflect.Type, config *CompareConfig) bool {
 	}
 
 	switch typ.Kind() {
-	case reflect.Array, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice, reflect.Struct:
+	case reflect.Array, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice, reflect.Struct:
 		return false
 	default:
 		return true
@@ -422,6 +429,9 @@ func isFieldIgnored(fieldPath string, fieldName string, structType reflect.Type,
 
 // compareStructs compares two structs field by field
 func compareStructs(path string, leftVal, rightVal reflect.Value, result *DiffResult, config *CompareConfig) error {
+	if comparisonDepthExceeded(config) {
+		return nil
+	}
 	typ := leftVal.Type()
 	numFields := leftVal.NumField()
 
@@ -458,9 +468,6 @@ func compareStructs(path string, leftVal, rightVal reflect.Value, result *DiffRe
 		if canSkipDeepEqualValues(fieldConfig) && reflect.DeepEqual(leftField, rightField) {
 			continue
 		}
-		if comparisonDepthExceeded(fieldConfig) {
-			continue
-		}
 		if canCompareTypeDirectly(field.Type, fieldConfig) {
 			if !reflect.DeepEqual(leftField, rightField) {
 				result.AddStructDiff(fieldPath, field.Name, leftField, rightField, ChangeTypeUpdated)
@@ -491,6 +498,9 @@ func normalizeStructFieldDiff(result *DiffResult, start int, path, fieldName str
 
 // compareSlices compares two slices using appropriate algorithm based on configuration
 func compareSlices(path string, leftVal, rightVal reflect.Value, result *DiffResult, config *CompareConfig) error {
+	if comparisonDepthExceeded(config) {
+		return nil
+	}
 	if config.IgnoreSliceOrder {
 		return compareSlicesAdvanced(path, leftVal, rightVal, result, config)
 	}
@@ -503,6 +513,9 @@ func compareSlices(path string, leftVal, rightVal reflect.Value, result *DiffRes
 	dynamicElementType := elementType.Kind() == reflect.Interface
 
 	for i := range maxLen {
+		if len(config.IgnoreFields) > 0 && isPathIgnored(path+"["+itoa(i)+"]", config) {
+			continue
+		}
 		var leftElem, rightElem any
 		var hasLeftElem, hasRightElem bool
 
@@ -516,16 +529,7 @@ func compareSlices(path string, leftVal, rightVal reflect.Value, result *DiffRes
 		}
 
 		if hasLeftElem && hasRightElem {
-			if comparisonDepthExceeded(config) {
-				continue
-			}
 			if directElementType || (dynamicElementType && canCompareDirectly(leftElem, rightElem, config)) {
-				if len(config.IgnoreFields) > 0 {
-					elementPath := path + "[" + itoa(i) + "]"
-					if isPathIgnored(elementPath, config) {
-						continue
-					}
-				}
 				if !reflect.DeepEqual(leftElem, rightElem) {
 					result.AddSliceDiff(path, i, leftElem, rightElem, ChangeTypeUpdated)
 				}
@@ -533,9 +537,6 @@ func compareSlices(path string, leftVal, rightVal reflect.Value, result *DiffRes
 			}
 
 			elementPath := path + "[" + itoa(i) + "]"
-			if isPathIgnored(elementPath, config) {
-				continue
-			}
 			start := len(result.Diffs)
 			if err := compareValues(elementPath, leftElem, rightElem, result, config); err != nil {
 				return err
@@ -584,6 +585,9 @@ func compareSlicesAdvanced(path string, leftVal, rightVal reflect.Value, result 
 	if len(configs) > 0 && configs[0] != nil {
 		config = configs[0]
 	}
+	if comparisonDepthExceeded(config) {
+		return nil
+	}
 
 	if !leftVal.IsValid() && !rightVal.IsValid() {
 		return nil
@@ -619,7 +623,7 @@ func compareSlicesAdvanced(path string, leftVal, rightVal reflect.Value, result 
 	}
 
 	if canCountSliceValues(leftVal.Type().Elem(), config) {
-		compareSlicesByCount(path, leftVal, rightVal, result)
+		compareSlicesByCount(path, leftVal, rightVal, result, config)
 		return nil
 	}
 
@@ -655,39 +659,37 @@ func canCountSliceValues(elemType reflect.Type, config *CompareConfig) bool {
 	return true
 }
 
-func compareSlicesByCount(path string, leftVal, rightVal reflect.Value, result *DiffResult) {
-	leftCounts := make(map[any]int, leftVal.Len())
-	for i := range leftVal.Len() {
-		leftCounts[leftVal.Index(i).Interface()]++
-	}
-
+func compareSlicesByCount(path string, leftVal, rightVal reflect.Value, result *DiffResult, config *CompareConfig) {
 	rightRemaining := make(map[any]int, rightVal.Len())
+	remaining := 0
 	for i := range rightVal.Len() {
+		if len(config.IgnoreFields) > 0 && isPathIgnored(path+"["+itoa(i)+"]", config) {
+			continue
+		}
 		rightRemaining[rightVal.Index(i).Interface()]++
-	}
-	if len(leftCounts) == len(rightRemaining) {
-		equal := true
-		for elem, count := range leftCounts {
-			if rightRemaining[elem] != count {
-				equal = false
-				break
-			}
-		}
-		if equal {
-			return
-		}
+		remaining++
 	}
 
 	for i := range leftVal.Len() {
+		if len(config.IgnoreFields) > 0 && isPathIgnored(path+"["+itoa(i)+"]", config) {
+			continue
+		}
 		elem := leftVal.Index(i).Interface()
 		if rightRemaining[elem] > 0 {
 			rightRemaining[elem]--
+			remaining--
 			continue
 		}
 		result.AddDiff(path, elem, nil)
 	}
+	if remaining == 0 {
+		return
+	}
 
 	for i := range rightVal.Len() {
+		if len(config.IgnoreFields) > 0 && isPathIgnored(path+"["+itoa(i)+"]", config) {
+			continue
+		}
 		elem := rightVal.Index(i).Interface()
 		if rightRemaining[elem] > 0 {
 			rightRemaining[elem]--
@@ -697,34 +699,70 @@ func compareSlicesByCount(path string, leftVal, rightVal reflect.Value, result *
 }
 
 func compareSlicesSemantically(path string, leftVal, rightVal reflect.Value, result *DiffResult, config *CompareConfig) error {
-	rightMatched := make([]bool, rightVal.Len())
-
-	for i := range leftVal.Len() {
-		leftElem := leftVal.Index(i).Interface()
-		matched := false
-		for j := range rightVal.Len() {
-			if rightMatched[j] {
-				continue
-			}
-			rightElem := rightVal.Index(j).Interface()
-			candidateResult := &DiffResult{}
-			elementPath := path + "[" + itoa(i) + "]"
-			if err := compareValues(elementPath, leftElem, rightElem, candidateResult, config); err != nil {
-				return err
-			}
-			if !candidateResult.HasDifferences() {
-				rightMatched[j] = true
-				matched = true
-				break
-			}
-		}
-		if !matched {
-			result.AddDiff(path, leftElem, nil)
+	// A right entry stores the left index matched to it. Negative indexes
+	// distinguish available entries (-1) from ignored entries (-2).
+	rightMatches := make([]int, rightVal.Len())
+	for j := range rightMatches {
+		rightMatches[j] = -1
+		if len(config.IgnoreFields) > 0 && isPathIgnored(path+"["+itoa(j)+"]", config) {
+			rightMatches[j] = -2
 		}
 	}
+	leftMatched := make([]bool, leftVal.Len())
+	visited := make([]int, rightVal.Len())
+	var match func(int, int) (bool, error)
+	match = func(i, attempt int) (bool, error) {
+		leftElem := leftVal.Index(i).Interface()
+		elementPath := path + "[" + itoa(i) + "]"
+		// Prefer an unused entry. Only reconsider existing matches when needed;
+		// custom comparators may allow several overlapping matches.
+		for _, rematch := range []bool{false, true} {
+			for j, previous := range rightMatches {
+				if previous == -2 || visited[j] == attempt || (previous >= 0) != rematch {
+					continue
+				}
+				candidateResult := &DiffResult{}
+				if err := compareValues(elementPath, leftElem, rightVal.Index(j).Interface(), candidateResult, config); err != nil {
+					return false, err
+				}
+				if candidateResult.HasDifferences() {
+					continue
+				}
+				visited[j] = attempt
+				if previous >= 0 {
+					reassigned, err := match(previous, attempt)
+					if err != nil {
+						return false, err
+					}
+					if !reassigned {
+						continue
+					}
+				}
+				rightMatches[j] = i
+				return true, nil
+			}
+		}
+		return false, nil
+	}
 
-	for j := range rightVal.Len() {
-		if !rightMatched[j] {
+	for i := range leftVal.Len() {
+		if len(config.IgnoreFields) > 0 && isPathIgnored(path+"["+itoa(i)+"]", config) {
+			leftMatched[i] = true
+			continue
+		}
+		matched, err := match(i, i+1)
+		if err != nil {
+			return err
+		}
+		leftMatched[i] = matched
+	}
+	for i, matched := range leftMatched {
+		if !matched {
+			result.AddDiff(path, leftVal.Index(i).Interface(), nil)
+		}
+	}
+	for j, matched := range rightMatches {
+		if matched == -1 {
 			result.AddDiff(path, nil, rightVal.Index(j).Interface())
 		}
 	}
@@ -802,18 +840,17 @@ func numericValuesEqual(leftVal, rightVal reflect.Value) bool {
 }
 
 func integerValueEqualsFloat(integer reflect.Value, float float64) bool {
-	floatValue := new(big.Rat)
-	if floatValue.SetFloat64(float) == nil || !floatValue.IsInt() {
+	if math.Trunc(float) != float {
 		return false
 	}
 
-	integerValue := new(big.Int)
+	// Check bounds before converting: out-of-range float-to-integer conversions
+	// are implementation-dependent. Powers of two are exactly representable,
+	// unlike MaxInt64 and MaxUint64 when rounded to float64.
 	if isSignedIntKind(integer.Kind()) {
-		integerValue.SetInt64(integer.Int())
-	} else {
-		integerValue.SetUint64(integer.Uint())
+		return float >= -0x1p63 && float < 0x1p63 && int64(float) == integer.Int()
 	}
-	return floatValue.Num().Cmp(integerValue) == 0
+	return float >= 0 && float < 0x1p64 && uint64(float) == integer.Uint()
 }
 
 // isSignedIntKind returns true if the kind is a signed integer
@@ -833,6 +870,9 @@ func itoa(i int) string {
 
 // compareMaps compares two maps key by key
 func compareMaps(path string, leftVal, rightVal reflect.Value, result *DiffResult, config *CompareConfig) error {
+	if comparisonDepthExceeded(config) {
+		return nil
+	}
 	valueType := leftVal.Type().Elem()
 	directValueType := canCompareTypeDirectly(valueType, config)
 	dynamicValueType := valueType.Kind() == reflect.Interface
@@ -842,6 +882,9 @@ func compareMaps(path string, leftVal, rightVal reflect.Value, result *DiffResul
 		leftMapVal := leftIterator.Value()
 		keyStr := fmt.Sprintf("%v", key.Interface())
 		elementPath := path + "[" + keyStr + "]"
+		if isPathIgnored(elementPath, config) {
+			continue
+		}
 
 		rightMapVal := rightVal.MapIndex(key)
 		if !rightMapVal.IsValid() {
@@ -852,9 +895,6 @@ func compareMaps(path string, leftVal, rightVal reflect.Value, result *DiffResul
 
 		leftInterface := leftMapVal.Interface()
 		rightInterface := rightMapVal.Interface()
-		if comparisonDepthExceeded(config) || isPathIgnored(elementPath, config) {
-			continue
-		}
 		if directValueType || (dynamicValueType && canCompareDirectly(leftInterface, rightInterface, config)) {
 			if !reflect.DeepEqual(leftInterface, rightInterface) {
 				result.AddMapDiff(elementPath, key.Interface(), leftInterface, rightInterface, ChangeTypeUpdated)
@@ -876,6 +916,9 @@ func compareMaps(path string, leftVal, rightVal reflect.Value, result *DiffResul
 		if !leftVal.MapIndex(key).IsValid() {
 			keyStr := fmt.Sprintf("%v", key.Interface())
 			elementPath := path + "[" + keyStr + "]"
+			if isPathIgnored(elementPath, config) {
+				continue
+			}
 			result.AddMapDiff(elementPath, key.Interface(), nil, rightIterator.Value().Interface(), ChangeTypeAdded)
 		}
 	}

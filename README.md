@@ -6,7 +6,7 @@ Structural diff library for Go. Compares structs, slices, maps, and primitives r
 
 ## Requirements
 
-Go 1.27 or newer.
+Go 1.27.3 or newer.
 
 ## Quick Start
 
@@ -90,6 +90,21 @@ Options apply recursively, including inside structs, maps, ordered slices, and
 unordered slices. Numeric comparison is exact: large integers are not treated as
 equal to rounded floating-point values.
 
+Ignored paths also apply to added and removed entries. For example,
+`WithIgnoreFields("Metadata[updatedAt]", "Items[0]")` skips that map entry and
+slice index. When ignoring slice order, ignored indexes refer to the original
+positions in each input, before matching. Unordered comparisons preserve
+duplicate counts and find matching pairs using the configured comparators;
+comparators should be deterministic because matching can call them repeatedly.
+
+`WithMaxDepth(1)` compares root scalar values but skips fields and collection
+entries. Each pointer dereference also consumes a depth level. Use zero for
+unlimited depth; reference cycles are detected automatically.
+
+Only exported struct fields are compared. Functions are compared by code
+pointer, which cannot distinguish all closures with different captured values.
+Use a custom comparator when your application needs different function semantics.
+
 ### Struct Tags
 
 ```go
@@ -114,6 +129,19 @@ go run ./cmd/demo
 `encoding/json/v2`. `DiffResult` implements both `json.Marshaler` and the more
 efficient `json.MarshalerTo`, so it can be embedded directly in another JSON
 document with `json.Marshal(result)`.
+
+Use `WriteJSON` to write the same formatted array to an `io.Writer` and receive
+serialization or write errors directly:
+
+```go
+if err := result.WriteJSON(os.Stdout); err != nil {
+    return err
+}
+```
+
+Streaming output can be partial when an error occurs. `ToJSON` keeps its
+string-only API and returns an error object inside an array if serialization
+fails. Text output marks cyclic values instead of recursing indefinitely.
 
 ## Benchmarks
 

@@ -43,7 +43,7 @@ type StructDiff struct {
 
 // DiffResult contains all differences found between two values
 type DiffResult struct {
-	Diffs []any // Can hold Diff, MapDiff, SliceDiff, or StructDiff
+	Diffs []any // Can hold Diff, MapDiff, SliceDiff, or StructDiff values or pointers
 }
 
 // visit identifies a pair of reference values currently being compared.

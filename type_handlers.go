@@ -31,7 +31,7 @@ func (h *TimeHandler) Compare(left, right any, path string, result *DiffResult, 
 	return nil
 }
 
-// InterfaceHandler handles any types by comparing their underlying values
+// InterfaceHandler handles interfaces by comparing their underlying values.
 type InterfaceHandler struct{}
 
 func (h *InterfaceHandler) CanHandle(typ reflect.Type) bool {
@@ -39,38 +39,15 @@ func (h *InterfaceHandler) CanHandle(typ reflect.Type) bool {
 }
 
 func (h *InterfaceHandler) Compare(left, right any, path string, result *DiffResult, config *CompareConfig) error {
-	leftVal := reflect.ValueOf(left)
-	rightVal := reflect.ValueOf(right)
-
-	leftIsNil := !leftVal.IsValid() || (leftVal.Kind() == reflect.Interface && leftVal.IsNil())
-	rightIsNil := !rightVal.IsValid() || (rightVal.Kind() == reflect.Interface && rightVal.IsNil())
-
-	if leftIsNil && rightIsNil {
-		return nil
-	}
-
-	if leftIsNil {
-		result.Diffs = append(result.Diffs, &Diff{
-			Path:  path,
-			Left:  nil,
-			Right: right,
-		})
-		return nil
-	}
-
-	if rightIsNil {
-		result.Diffs = append(result.Diffs, &Diff{
-			Path:  path,
-			Left:  left,
-			Right: nil,
-		})
-		return nil
-	}
-
-	return compareValues(path, leftVal.Elem().Interface(), rightVal.Elem().Interface(), result, config)
+	// Passing an interface as any already exposes its dynamic value. Calling
+	// reflect.Value.Elem here panics for concrete values such as strings and
+	// integers. The regular comparison also handles pointers to interfaces.
+	return compareValues(path, left, right, result, config)
 }
 
-// FunctionHandler handles function types (compares by reference or ignores based on config)
+// FunctionHandler compares function entry points. Functions sharing code, such
+// as closures with different captured values, may compare equal. Supply a
+// custom comparator when function state matters.
 type FunctionHandler struct{}
 
 func (h *FunctionHandler) CanHandle(typ reflect.Type) bool {
@@ -78,7 +55,7 @@ func (h *FunctionHandler) CanHandle(typ reflect.Type) bool {
 }
 
 func (h *FunctionHandler) Compare(left, right any, path string, result *DiffResult, config *CompareConfig) error {
-	// Functions compare by pointer identity; nil vs non-nil counts as diff.
+	// Functions compare by code pointer; nil vs non-nil counts as diff.
 	leftVal := reflect.ValueOf(left)
 	rightVal := reflect.ValueOf(right)
 

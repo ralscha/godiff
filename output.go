@@ -4,6 +4,8 @@ import (
 	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"fmt"
+	"io"
+	"reflect"
 	"strconv"
 	"strings"
 )
@@ -27,94 +29,156 @@ func (dr *DiffResult) String() string {
 	sb.WriteString(" differences:\n")
 
 	for _, diff := range dr.Diffs {
-		switch d := diff.(type) {
-		case *MapDiff:
-			sb.WriteString(string(d.ChangeType))
-			sb.WriteString(" ")
-			sb.WriteString(d.Path)
-			sb.WriteString(": ")
-			switch d.ChangeType {
-			case ChangeTypeAdded:
-				fmt.Fprint(&sb, d.Right)
-			case ChangeTypeRemoved:
-				fmt.Fprint(&sb, d.Left)
-			default:
-				fmt.Fprint(&sb, d.Left)
-				sb.WriteString(" -> ")
-				fmt.Fprint(&sb, d.Right)
-			}
-			sb.WriteString("\n")
-		case *SliceDiff:
-			sb.WriteString(string(d.ChangeType))
-			sb.WriteString(" ")
-			sb.WriteString(d.Path)
-			sb.WriteString("[")
-			sb.WriteString(strconv.Itoa(d.Index))
-			sb.WriteString("]: ")
-			switch d.ChangeType {
-			case ChangeTypeAdded:
-				fmt.Fprint(&sb, d.Right)
-			case ChangeTypeRemoved:
-				fmt.Fprint(&sb, d.Left)
-			default:
-				fmt.Fprint(&sb, d.Left)
-				sb.WriteString(" -> ")
-				fmt.Fprint(&sb, d.Right)
-			}
-			sb.WriteString("\n")
-		case *StructDiff:
-			sb.WriteString(string(d.ChangeType))
-			if d.FieldName != "" {
-				sb.WriteString(" ")
-				if d.Path == d.FieldName {
-					sb.WriteString(d.FieldName)
-					sb.WriteString(": ")
-				} else {
-					pathParts := strings.Split(d.Path, ".")
-					if len(pathParts) > 1 && pathParts[len(pathParts)-1] == d.FieldName {
-						parentPath := strings.Join(pathParts[:len(pathParts)-1], ".")
-						if parentPath == "" {
-							sb.WriteString(d.FieldName)
-							sb.WriteString(": ")
-						} else {
-							sb.WriteString(parentPath)
-							sb.WriteString(".")
-							sb.WriteString(d.FieldName)
-							sb.WriteString(": ")
-						}
-					} else {
-						sb.WriteString(d.Path)
-						sb.WriteString(": ")
-					}
-				}
-			} else {
-				sb.WriteString(": ")
-			}
-			switch d.ChangeType {
-			case ChangeTypeAdded:
-				fmt.Fprint(&sb, d.Right)
-			case ChangeTypeRemoved:
-				fmt.Fprint(&sb, d.Left)
-			default:
-				fmt.Fprint(&sb, d.Left)
-				sb.WriteString(" -> ")
-				fmt.Fprint(&sb, d.Right)
-			}
-			sb.WriteString("\n")
-		case *Diff:
-			sb.WriteString("UPDATED ")
-			sb.WriteString(d.Path)
-			sb.WriteString(": ")
-			fmt.Fprint(&sb, d.Left)
-			sb.WriteString(" -> ")
-			fmt.Fprint(&sb, d.Right)
-			sb.WriteString("\n")
-		default:
+		d := describeDiff(diff)
+		if d.kind == "unknown" {
 			sb.WriteString("? Unknown diff type\n")
+			continue
 		}
+		sb.WriteString(string(d.change))
+		sb.WriteString(" ")
+		if d.kind == "struct" && d.Path == "" {
+			sb.WriteString(d.fieldName)
+		} else {
+			sb.WriteString(d.Path)
+		}
+		if d.kind == "slice" {
+			sb.WriteString("[")
+			sb.WriteString(strconv.Itoa(d.index))
+			sb.WriteString("]")
+		}
+		sb.WriteString(": ")
+		switch d.change {
+		case ChangeTypeAdded:
+			writeDiffValue(&sb, d.Right)
+		case ChangeTypeRemoved:
+			writeDiffValue(&sb, d.Left)
+		default:
+			writeDiffValue(&sb, d.Left)
+			sb.WriteString(" -> ")
+			writeDiffValue(&sb, d.Right)
+		}
+		sb.WriteString("\n")
 	}
 
 	return sb.String()
+}
+
+func writeDiffValue(out *strings.Builder, value any) {
+	if hasFormattedValueCycle(value) {
+		fmt.Fprintf(out, "<cycle: %T>", value)
+		return
+	}
+	fmt.Fprint(out, value)
+}
+
+func hasFormattedValueCycle(value any) bool {
+	// fmt unwraps reflect.Value once when it is the top-level argument. Nested
+	// reflect.Values instead use their String method like other Stringers.
+	reflected, ok := value.(reflect.Value)
+	if !ok {
+		reflected = reflect.ValueOf(value)
+	}
+	var active visitTracker
+	return hasFormattingCycle(reflected, &active, 0)
+}
+
+// fmt handles nested pointers as addresses, but recursively formats maps and
+// slices without cycle detection. Check the values it will traverse before
+// handing them over. User-defined formatting methods retain their behavior.
+func hasFormattingCycle(value reflect.Value, active *visitTracker, depth int) bool {
+	if !value.IsValid() {
+		return false
+	}
+	if value.CanInterface() && value.Type().NumMethod() > 0 {
+		switch value.Interface().(type) {
+		case fmt.Formatter, fmt.Stringer, error:
+			return false
+		}
+	}
+	switch value.Kind() {
+	case reflect.Interface:
+		return hasFormattingCycle(value.Elem(), active, depth+1)
+	case reflect.Pointer:
+		if depth == 0 && !value.IsNil() {
+			switch value.Elem().Kind() {
+			case reflect.Array, reflect.Slice, reflect.Map, reflect.Struct:
+				return hasFormattingCycle(value.Elem(), active, depth+1)
+			}
+		}
+	case reflect.Map, reflect.Slice:
+		if value.IsNil() || value.Len() == 0 {
+			return false
+		}
+		pair := visit{typ: value.Type(), left: value.Pointer(), leftLen: value.Len()}
+		if !active.enter(pair) {
+			return true
+		}
+		defer active.leave(pair)
+		if value.Kind() == reflect.Map {
+			iter := value.MapRange()
+			for iter.Next() {
+				if hasFormattingCycle(iter.Key(), active, depth+1) || hasFormattingCycle(iter.Value(), active, depth+1) {
+					return true
+				}
+			}
+			return false
+		}
+		fallthrough
+	case reflect.Array:
+		for i := 0; i < value.Len(); i++ {
+			if hasFormattingCycle(value.Index(i), active, depth+1) {
+				return true
+			}
+		}
+	case reflect.Struct:
+		for i := 0; i < value.NumField(); i++ {
+			if hasFormattingCycle(value.Field(i), active, depth+1) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// diffDetails gives both renderers a common view of the supported value and
+// pointer forms. A typed nil pointer is treated like any other unknown entry.
+type diffDetails struct {
+	Diff
+	kind      string
+	change    ChangeType
+	key       any
+	index     int
+	fieldName string
+}
+
+func describeDiff(diff any) diffDetails {
+	switch d := diff.(type) {
+	case Diff:
+		return diffDetails{Diff: d, kind: "value", change: ChangeTypeUpdated}
+	case MapDiff:
+		return diffDetails{Diff: d.Diff, kind: "map", change: d.ChangeType, key: d.Key}
+	case SliceDiff:
+		return diffDetails{Diff: d.Diff, kind: "slice", change: d.ChangeType, index: d.Index}
+	case StructDiff:
+		return diffDetails{Diff: d.Diff, kind: "struct", change: d.ChangeType, fieldName: d.FieldName}
+	case *Diff:
+		if d != nil {
+			return describeDiff(*d)
+		}
+	case *MapDiff:
+		if d != nil {
+			return describeDiff(*d)
+		}
+	case *SliceDiff:
+		if d != nil {
+			return describeDiff(*d)
+		}
+	case *StructDiff:
+		if d != nil {
+			return describeDiff(*d)
+		}
+	}
+	return diffDetails{Diff: Diff{Path: "unknown"}, kind: "unknown", change: "UNKNOWN"}
 }
 
 // HasDifferences returns true if there are any differences
@@ -164,54 +228,41 @@ func (dr *DiffResult) jsonChanges() []jsonChange {
 	}
 
 	for _, diff := range dr.Diffs {
-		var jc jsonChange
-		switch d := diff.(type) {
-		case *MapDiff:
-			key := fmt.Sprintf("%v", d.Key)
-			jc = jsonChange{
-				Type:   "map",
-				Path:   d.Path,
-				Left:   d.Left,
-				Right:  d.Right,
-				Key:    &key,
-				Change: string(d.ChangeType),
+		d := describeDiff(diff)
+		jc := jsonChange{Type: d.kind, Path: d.Path, Left: d.Left, Right: d.Right, Change: string(d.change)}
+		switch d.kind {
+		case "map":
+			var key string
+			if hasFormattedValueCycle(d.key) {
+				key = fmt.Sprintf("<cycle: %T>", d.key)
+			} else {
+				key = fmt.Sprint(d.key)
 			}
-		case *SliceDiff:
-			index := d.Index
-			jc = jsonChange{
-				Type:   "slice",
-				Path:   d.Path,
-				Left:   d.Left,
-				Right:  d.Right,
-				Index:  &index,
-				Change: string(d.ChangeType),
-			}
-		case *StructDiff:
-			parentPath := d.Path
-			if d.FieldName != "" {
-				pathParts := strings.Split(d.Path, ".")
-				if len(pathParts) > 1 && pathParts[len(pathParts)-1] == d.FieldName {
-					parentPath = strings.Join(pathParts[:len(pathParts)-1], ".")
-				} else if d.Path == d.FieldName {
-					parentPath = ""
+			jc.Key = &key
+		case "slice":
+			index := d.index
+			jc.Index = &index
+		case "struct":
+			jc.FieldName = d.fieldName
+			if d.fieldName != "" {
+				if d.Path == d.fieldName {
+					jc.Path = ""
+				} else {
+					jc.Path = strings.TrimSuffix(d.Path, "."+d.fieldName)
 				}
 			}
-			jc = jsonChange{
-				Type:      "struct",
-				Path:      parentPath,
-				Left:      d.Left,
-				Right:     d.Right,
-				FieldName: d.FieldName,
-				Change:    string(d.ChangeType),
-			}
-		case *Diff:
-			jc = jsonChange{Type: "value", Path: d.Path, Left: d.Left, Right: d.Right, Change: "UPDATED"}
-		default:
-			jc = jsonChange{Type: "unknown", Path: "unknown", Change: "UNKNOWN"}
 		}
 		changes = append(changes, jc)
 	}
 	return changes
+}
+
+// WriteJSON writes the formatted change array to out, returning serialization
+// and writer errors. Like other streaming encoders, it may write partial output
+// before returning an error. The output matches ToJSON on success.
+func (dr *DiffResult) WriteJSON(out io.Writer) error {
+	return json.MarshalWrite(out, dr.jsonChanges(), json.Deterministic(true),
+		jsontext.Multiline(true), jsontext.WithIndent("  "))
 }
 
 // ToJSON returns a JSON representation of the diff result

@@ -19,9 +19,9 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"math"
 	"os"
-	"regexp"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -33,35 +33,55 @@ type benchResult struct {
 	allocsPerOp float64
 }
 
-var benchLineRE = regexp.MustCompile(`^(Benchmark[^\s]+)\s+([0-9]+)\s+([0-9]+(?:\.[0-9]+)?) ns/op(?:\s+([0-9]+(?:\.[0-9]+)?) B/op\s+([0-9]+(?:\.[0-9]+)?) allocs/op)?`)
+// Benchmark output contains value/unit pairs. Throughput and custom metrics
+// can appear between ns/op and the memory metrics, so parse each unit by name.
+func parseBenchmarkLine(line string) (benchResult, bool) {
+	fields := strings.Fields(line)
+	if len(fields) < 4 || len(fields)%2 != 0 || !strings.HasPrefix(fields[0], "Benchmark") {
+		return benchResult{}, false
+	}
+	if _, err := strconv.ParseUint(fields[1], 10, 64); err != nil {
+		return benchResult{}, false
+	}
+
+	result := benchResult{name: fields[0]}
+	hasTime := false
+	for i := 2; i < len(fields); i += 2 {
+		var metric *float64
+		switch fields[i+1] {
+		case "ns/op":
+			metric = &result.nsPerOp
+			hasTime = true
+		case "B/op":
+			metric = &result.bytesPerOp
+		case "allocs/op":
+			metric = &result.allocsPerOp
+		default:
+			continue
+		}
+		value, err := strconv.ParseFloat(fields[i], 64)
+		if err != nil || value < 0 || math.IsNaN(value) || math.IsInf(value, 0) {
+			return benchResult{}, false
+		}
+		*metric = value
+	}
+	return result, hasTime
+}
 
 func parseFile(path string) (map[string]benchResult, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	samples := make(map[string][]benchResult)
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if !strings.HasPrefix(line, "Benchmark") {
+		result, ok := parseBenchmarkLine(scanner.Text())
+		if !ok {
 			continue
 		}
-		m := benchLineRE.FindStringSubmatch(line)
-		if m == nil {
-			continue
-		}
-		name := m[1]
-		ns, _ := strconv.ParseFloat(m[3], 64)
-		var bytesVal, allocsVal float64
-		if m[4] != "" {
-			bytesVal, _ = strconv.ParseFloat(m[4], 64)
-		}
-		if m[5] != "" {
-			allocsVal, _ = strconv.ParseFloat(m[5], 64)
-		}
-		samples[name] = append(samples[name], benchResult{name: name, nsPerOp: ns, bytesPerOp: bytesVal, allocsPerOp: allocsVal})
+		samples[result.name] = append(samples[result.name], result)
 	}
 	if err := scanner.Err(); err != nil {
 		return nil, err
@@ -94,7 +114,7 @@ func parseFile(path string) (map[string]benchResult, error) {
 }
 
 func median(values []float64) float64 {
-	sort.Float64s(values)
+	slices.Sort(values)
 	middle := len(values) / 2
 	if len(values)%2 == 1 {
 		return values[middle]

@@ -22,7 +22,7 @@ tasks:
       - go fmt {{.PACKAGE}}
 
   lint:
-    desc: Run golangci-lint in a Docker container
+    desc: Run golangci-lint
     cmds:
       - golangci-lint run -v --timeout 5m
 
@@ -41,6 +41,7 @@ tasks:
     cmds:
       - task fuzz:strings
       - task fuzz:ints
+      - task fuzz:numeric
       - task fuzz:slices
       - task fuzz:structs
       - task fuzz:maps
@@ -57,6 +58,11 @@ tasks:
     desc: Run integer comparison fuzz tests
     cmds:
       - go test -fuzz=FuzzCompareInts -fuzztime={{.FUZZ_TIME}} .
+
+  fuzz:numeric:
+    desc: Check exact integer and float comparison against arbitrary-precision arithmetic
+    cmds:
+      - go test -fuzz=FuzzCompareIntegerFloat -fuzztime={{.FUZZ_TIME}} .
 
   fuzz:slices:
     desc: Run slice comparison fuzz tests
