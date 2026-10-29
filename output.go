@@ -64,6 +64,24 @@ func (dr *DiffResult) String() string {
 }
 
 func writeDiffValue(out *strings.Builder, value any) {
+	// Built-in scalars cannot contain cycles or define formatting methods.
+	// Write common values directly, leaving named types on the fmt path so
+	// their String, Error, and Format methods keep their usual behavior.
+	switch value := value.(type) {
+	case nil:
+		out.WriteString("<nil>")
+		return
+	case string:
+		out.WriteString(value)
+		return
+	case bool:
+		out.WriteString(strconv.FormatBool(value))
+		return
+	case int:
+		var buffer [20]byte
+		out.Write(strconv.AppendInt(buffer[:0], int64(value), 10))
+		return
+	}
 	if hasFormattedValueCycle(value) {
 		fmt.Fprintf(out, "<cycle: %T>", value)
 		return

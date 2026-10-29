@@ -68,6 +68,61 @@ func TestStringPreservesStructLocation(t *testing.T) {
 	}
 }
 
+type scalarStringer string
+
+func (s scalarStringer) String() string { return "string: " + string(s) }
+
+type scalarFormatter int
+
+func (n scalarFormatter) Format(state fmt.State, _ rune) {
+	_, _ = fmt.Fprintf(state, "formatted: %d", int(n))
+}
+
+type scalarError bool
+
+func (b scalarError) Error() string { return fmt.Sprintf("error: %t", bool(b)) }
+
+func TestStringPreservesScalarFormatting(t *testing.T) {
+	type namedString string
+	type namedInt int
+	type namedBool bool
+	maxInt := int(^uint(0) >> 1)
+	for _, tc := range []struct {
+		name  string
+		value any
+	}{
+		{"nil", nil},
+		{"empty string", ""},
+		{"string", "hello"},
+		{"string with special characters", "line\n\t\"text\"\x00"},
+		{"false", false},
+		{"true", true},
+		{"zero", 0},
+		{"positive int", 12345},
+		{"negative int", -12345},
+		{"maximum int", maxInt},
+		{"minimum int", -maxInt - 1},
+		{"named string", namedString("hello")},
+		{"named int", namedInt(12345)},
+		{"named bool", namedBool(true)},
+		{"stringer", scalarStringer("hello")},
+		{"formatter", scalarFormatter(12345)},
+		{"error", scalarError(true)},
+		{"typed nil", (*int)(nil)},
+		{"typed nil stringer", (*scalarStringer)(nil)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			result := &DiffResult{}
+			result.AddDiff("value", tc.value, tc.value)
+			formatted := fmt.Sprint(tc.value)
+			want := "Found 1 differences:\nUPDATED value: " + formatted + " -> " + formatted + "\n"
+			if got := result.String(); got != want {
+				t.Errorf("String() = %q, want %q", got, want)
+			}
+		})
+	}
+}
+
 type cyclicStringer map[string]any
 
 func (cyclicStringer) String() string { return "custom string" }
