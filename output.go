@@ -149,8 +149,11 @@ func hasFormattingCycle(value reflect.Value, active *visitTracker, depth int) bo
 			}
 		}
 	case reflect.Struct:
-		for _, field := range value.Fields() {
-			if hasFormattingCycle(field, active, depth+1) {
+		// The Fields iterator makes cycle-tracking state escape to the heap.
+		// Cache the count so go fix's stditerators pass preserves indexed access.
+		numFields := value.NumField()
+		for i := range numFields {
+			if hasFormattingCycle(value.Field(i), active, depth+1) {
 				return true
 			}
 		}

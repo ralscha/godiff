@@ -137,6 +137,8 @@ func BenchmarkStringGeneration(b *testing.B) {
 	b.ReportAllocs()
 	left := createLargeBenchmarkStruct(1)
 	right := createLargeBenchmarkStruct(2)
+	// Exercise timestamp formatting even when the clock has coarse resolution.
+	right.Created = left.Created.Add(time.Nanosecond)
 
 	result, _ := Compare(left, right)
 

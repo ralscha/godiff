@@ -123,6 +123,21 @@ func TestStringPreservesScalarFormatting(t *testing.T) {
 	}
 }
 
+func TestFormattingCycleCheckAllocations(t *testing.T) {
+	value := any(struct {
+		Name   string
+		Nested struct{ Count int }
+	}{Name: "example"})
+	allocs := testing.AllocsPerRun(100, func() {
+		if hasFormattedValueCycle(value) {
+			t.Fatal("acyclic struct reported as cyclic")
+		}
+	})
+	if allocs != 0 {
+		t.Errorf("cycle check allocated %g times, want 0", allocs)
+	}
+}
+
 type cyclicStringer map[string]any
 
 func (cyclicStringer) String() string { return "custom string" }
