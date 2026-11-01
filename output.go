@@ -149,8 +149,8 @@ func hasFormattingCycle(value reflect.Value, active *visitTracker, depth int) bo
 			}
 		}
 	case reflect.Struct:
-		for i := 0; i < value.NumField(); i++ {
-			if hasFormattingCycle(value.Field(i), active, depth+1) {
+		for _, field := range value.Fields() {
+			if hasFormattingCycle(field, active, depth+1) {
 				return true
 			}
 		}
@@ -196,7 +196,7 @@ func describeDiff(diff any) diffDetails {
 			return describeDiff(*d)
 		}
 	}
-	return diffDetails{Diff: Diff{Path: "unknown"}, kind: "unknown", change: "UNKNOWN"}
+	return diffDetails{Path: "unknown", kind: "unknown", change: "UNKNOWN"}
 }
 
 // HasDifferences returns true if there are any differences
